@@ -27,6 +27,64 @@ import com.rommclient.android.RommDatabaseHelper
 
 import com.rommclient.android.GameAdapter
 
+// Map RomM platform slugs to ES-DE folder names
+private val esDeFolderMap = mapOf(
+    "3do" to "Panasonic 3DO",
+    "amiga" to "Commodore Amiga",
+    "arcade" to "Arcade",
+    "atari2600" to "Atari 2600",
+    "atari5200" to "Atari 5200",
+    "atari7800" to "Atari 7800",
+    "atari800" to "Atari 800",
+    "atarijaguar" to "Atari Jaguar",
+    "atarilynx" to "Atari Lynx",
+    "colecovision" to "ColecoVision",
+    "dreamcast" to "Sega Dreamcast",
+    "fds" to "Famicom Disk System",
+    "gb" to "Nintendo Game Boy",
+    "gba" to "Nintendo Game Boy Advance",
+    "gbc" to "Nintendo Game Boy Color",
+    "gc" to "Nintendo GameCube",
+    "genesis" to "Sega Genesis",
+    "gg" to "Sega Game Gear",
+    "intellivision" to "Mattel Intellivision",
+    "macintosh" to "Apple Macintosh",
+    "mastersystem" to "Sega Master System",
+    "megadrive" to "Sega Mega Drive",
+    "msx" to "MSX",
+    "n64" to "Nintendo 64",
+    "nds" to "Nintendo DS",
+    "neogeo" to "Neo Geo",
+    "nes" to "Nintendo Entertainment System",
+    "ngp" to "Neo Geo Pocket",
+    "ngpc" to "Neo Geo Pocket Color",
+    "pc" to "PC",
+    "pcengine" to "PC Engine",
+    "ps1" to "Sony PlayStation",
+    "ps2" to "Sony PlayStation 2",
+    "ps3" to "Sony PlayStation 3",
+    "psp" to "Sony PSP",
+    "saturn" to "Sega Saturn",
+    "scummvm" to "ScummVM",
+    "sega32x" to "Sega 32X",
+    "segacd" to "Sega CD",
+    "sg1000" to "Sega SG-1000",
+    "snes" to "Super Nintendo Entertainment System",
+    "switch" to "Nintendo Switch",
+    "tic80" to "TIC-80",
+    "trs80" to "TRS-80",
+    "vectrex" to "Vectrex",
+    "vic20" to "Commodore VIC-20",
+    "virtualboy" to "Nintendo Virtual Boy",
+    "wii" to "Nintendo Wii",
+    "wiiu" to "Nintendo Wii U",
+    "wswan" to "WonderSwan",
+    "wswancolor" to "WonderSwan Color",
+    "xbox" to "Microsoft Xbox",
+    "xbox360" to "Microsoft Xbox 360",
+    "zxspectrum" to "ZX Spectrum"
+)
+
 class GameListActivity : AppCompatActivity() {
     private val client = OkHttpClient()
 
@@ -95,18 +153,19 @@ class GameListActivity : AppCompatActivity() {
                 Log.d("GameListActivity", "Resolved IDs: PLATFORM_ID=$resolvedPlatformId, COLLECTION_ID=$resolvedCollectionId")
 
                 val roms = mutableListOf<org.json.JSONObject>()
-                var page = 1
+                var offset = 0
+                val limit = 100
                 var totalCount = -1
 
                 while (true) {
                     val url = when {
                         resolvedCollectionId != null -> {
                             Log.d("GameListActivity", "Using collection ID $resolvedCollectionId to fetch ROMs")
-                            "http://$host:$port/api/roms?collection_id=$resolvedCollectionId&page=$page&page_size=100"
+                            "http://$host:$port/api/roms?collection_id=$resolvedCollectionId&limit=$limit&offset=$offset"
                         }
                         resolvedPlatformId != null -> {
                             Log.d("GameListActivity", "Using platform ID $resolvedPlatformId to fetch ROMs")
-                            "http://$host:$port/api/roms?platform_id=$resolvedPlatformId&page=$page&page_size=100"
+                            "http://$host:$port/api/roms?platform_id=$resolvedPlatformId&limit=$limit&offset=$offset"
                         }
                         else -> {
                             Log.e("GameListActivity", "No valid platform or collection ID found in intent extras.")
@@ -117,9 +176,8 @@ class GameListActivity : AppCompatActivity() {
                         }
                     }
 
-                    Log.d("GameListActivity", "Fetching page $page from: $url")
+                    Log.d("GameListActivity", "Fetching offset $offset from: $url")
                     val credential = Credentials.basic(user, pass)
-                    Log.d("GameListActivity", "Authorization header: $credential")
                     val request = Request.Builder()
                         .url(url)
                         .addHeader("Authorization", credential)
@@ -145,24 +203,23 @@ class GameListActivity : AppCompatActivity() {
                     }
                     val items = root.optJSONArray("items") ?: JSONArray()
                     if (items.length() == 0) {
-                        Log.w("GameListActivity", "No ROMs returned on page $page")
+                        Log.w("GameListActivity", "No ROMs returned at offset $offset")
                         break
                     }
 
                     for (i in 0 until items.length()) {
                         roms.add(items.getJSONObject(i))
                     }
-                    Log.d("GameListActivity", "Fetched ${items.length()} items for page $page")
+                    Log.d("GameListActivity", "Fetched ${items.length()} items for offset $offset")
                     if (totalCount > 0 && roms.size >= totalCount) break
 
-                    // Update progress dialog with percent
                     withContext(Dispatchers.Main) {
                         val totalSoFar = roms.size
-                        val percent = if (totalCount > 0) (totalSoFar * 100 / totalCount).coerceAtMost(100) else (page * 100 / (page + 1))
+                        val percent = if (totalCount > 0) (totalSoFar * 100 / totalCount).coerceAtMost(100) else 100
                         progressDialog.setMessage("Loading games... $percent%")
                     }
 
-                    page++
+                    offset += items.length()
                 }
 
                 withContext(Dispatchers.Main) {
@@ -184,6 +241,7 @@ class GameListActivity : AppCompatActivity() {
                             val file = files.getJSONObject(0)
                             val fileName = file.optString("file_name")
                             val platformSlug = game.optString("platform_fs_slug")
+                            val esDeFolder = esDeFolderMap[platformSlug] ?: platformSlug
                             val romId = game.optInt("id")
                             var fsName = file.optString("fs_name")
                             if (fsName.isNullOrBlank()) {
@@ -198,9 +256,9 @@ class GameListActivity : AppCompatActivity() {
                             if (downloadDir.startsWith("content://")) {
                                 val dirUri = Uri.parse(downloadDir)
                                 val docFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(this@GameListActivity, dirUri)
-                                // Create platform folder if not exists
-                                val platformDir = docFile?.findFile(platformSlug)
-                                    ?: docFile?.createDirectory(platformSlug)
+                            // Create ES-DE platform folder if not exists
+                            val platformDir = docFile?.findFile(esDeFolder)
+                                ?: docFile?.createDirectory(esDeFolder)
                                 if (platformDir == null) {
                                     Toast.makeText(this@GameListActivity, "Unable to access/create platform folder.", Toast.LENGTH_LONG).show()
                                     return
@@ -270,8 +328,8 @@ class GameListActivity : AppCompatActivity() {
                                     }
                                 }
                             } else {
-                                // Assume normal file path
-                                val outputPath = "$downloadDir/$platformSlug/$fileName"
+                            // Assume normal file path, using ES-DE folder
+                            val outputPath = "$downloadDir/$esDeFolder/$fileName"
                                 val progressDialog = ProgressDialog(this@GameListActivity)
                                 progressDialog.setMessage("Downloading $fileName... 0%")
                                 progressDialog.setCancelable(false)
@@ -382,8 +440,9 @@ class GameListActivity : AppCompatActivity() {
             val file = files.optJSONObject(0) ?: continue
             val fileName = file.optString("file_name")
             val platformSlug = game.optString("platform_fs_slug")
+            val esDeFolder = esDeFolderMap[platformSlug] ?: platformSlug
             if (skipExisting) {
-                val fileObj = File("$downloadDir/$platformSlug/$fileName")
+                val fileObj = File("$downloadDir/$esDeFolder/$fileName")
                 if (fileObj.exists()) continue
             }
         }
@@ -407,7 +466,8 @@ class GameListActivity : AppCompatActivity() {
             val file = files.optJSONObject(0) ?: return@filter false
             val fileName = file.optString("file_name")
             val platformSlug = game.optString("platform_fs_slug")
-            val localFile = File("$downloadDir/$platformSlug/$fileName")
+            val esDeFolder = esDeFolderMap[platformSlug] ?: platformSlug
+            val localFile = File("$downloadDir/$esDeFolder/$fileName")
             !(skipExisting && (localFile.exists() || db.isDownloaded(platformSlug, fileName)))
         }
 
@@ -437,6 +497,7 @@ class GameListActivity : AppCompatActivity() {
                 var fsName = file.optString("fs_name")
                 if (fsName.isNullOrBlank()) fsName = fileName
                 val platformSlug = game.optString("platform_fs_slug")
+                val esDeFolder = esDeFolderMap[platformSlug] ?: platformSlug
                 val romId = game.optInt("id")
 
                 val quotedFsName = Uri.encode(fsName)
@@ -446,7 +507,7 @@ class GameListActivity : AppCompatActivity() {
                 if (downloadDir.startsWith("content://")) {
                     val dirUri = Uri.parse(downloadDir)
                     val docFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(this@GameListActivity, dirUri)
-                    val platformDir = docFile?.findFile(platformSlug) ?: docFile?.createDirectory(platformSlug)
+                    val platformDir = docFile?.findFile(esDeFolder) ?: docFile?.createDirectory(esDeFolder)
                     val outFile = platformDir?.findFile(fileName) ?: platformDir?.createFile("*/*", fileName)
 
                     if (outFile == null) {
@@ -474,7 +535,7 @@ class GameListActivity : AppCompatActivity() {
                         Log.e("BulkDownload", "Error downloading $fileName", e)
                     }
                 } else {
-                    val outputPath = "$downloadDir/$platformSlug/$fileName"
+                    val outputPath = "$downloadDir/$esDeFolder/$fileName"
                     val outputFile = File(outputPath)
                     outputFile.parentFile?.mkdirs()
                     try {
