@@ -1,6 +1,9 @@
 
 package com.rommclient.android
 
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Observer
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.*
@@ -13,18 +16,33 @@ class LibraryFragment : Fragment() {
         val listView = root.findViewById<ListView>(R.id.listView)
 
         val context = requireContext()
-        val db = RommDatabaseHelper(context)
-        val slugs = db.getPlatformSlugs()
-
-        val adapter = ArrayAdapter(context, android.R.layout.simple_list_item_1, slugs)
+        val viewModel: LibraryViewModel by viewModels()
+        val adapter = ArrayAdapter<String>(context, android.R.layout.simple_list_item_1, mutableListOf())
         listView.adapter = adapter
+
+        viewModel.platformSlugs.observe(viewLifecycleOwner, Observer { slugs ->
+            adapter.clear()
+            adapter.addAll(slugs)
+            adapter.notifyDataSetChanged()
+        })
+
+        viewModel.loadSlugs()
 
         listView.setOnItemClickListener { _, _, position, _ ->
             val intent = Intent(context, LibraryGamesActivity::class.java)
-            intent.putExtra("platform_slug", slugs[position])
-            startActivity(intent)
+            val selectedSlug = adapter.getItem(position)
+            if (selectedSlug != null) {
+                intent.putExtra("platform_slug", selectedSlug)
+                startActivity(intent)
+            }
         }
 
         return root
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val viewModel: LibraryViewModel by viewModels()
+        viewModel.loadSlugs()
     }
 }

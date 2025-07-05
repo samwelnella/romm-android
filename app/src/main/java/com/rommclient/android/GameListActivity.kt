@@ -1,5 +1,10 @@
 package com.rommclient.android
 
+
+import androidx.activity.viewModels
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
+
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +29,7 @@ import org.json.JSONObject
 import java.io.File
 
 import com.rommclient.android.RommDatabaseHelper
+import com.rommclient.android.DownloadProgressTracker
 
 import com.rommclient.android.GameAdapter
 
@@ -105,6 +111,8 @@ class GameListActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val viewModel: GameListViewModel by viewModels()
         setContentView(R.layout.activity_game_list)
 
         // Set the title of the activity to the platform or collection name.
@@ -287,128 +295,132 @@ class GameListActivity : AppCompatActivity() {
                                     return
                                 }
 
-                                val progressDialog = ProgressDialog(this@GameListActivity)
-                                progressDialog.setMessage("Downloading $fileName... 0%")
-                                progressDialog.setCancelable(false)
-                                progressDialog.show()
-
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    try {
-                                        val request = Request.Builder().url(downloadUrl).header("Authorization", Credentials.basic(user, pass)).build()
-                                        val response = client.newCall(request).execute()
-                                        if (!response.isSuccessful) {
-                                            withContext(Dispatchers.Main) {
-                                                Toast.makeText(this@GameListActivity, "Download failed: ${response.code}", Toast.LENGTH_LONG).show()
-                                                progressDialog.dismiss()
-                                            }
-                                            return@launch
-                                        }
-                                        val input = response.body?.byteStream()
-                                        val output = contentResolver.openOutputStream(outFile.uri)
-                                        if (input != null && output != null) {
-                                            val buffer = ByteArray(8192)
-                                            var bytesRead: Int
-                                            var totalRead = 0L
-                                            val contentLength = response.body?.contentLength() ?: -1L
-                                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                                output.write(buffer, 0, bytesRead)
-                                                totalRead += bytesRead
-                                                if (contentLength > 0) {
-                                                    val percent = (totalRead * 100 / contentLength).toInt()
-                                                    withContext(Dispatchers.Main) {
-                                                        progressDialog.setMessage("Downloading $fileName... $percent%")
-                                                    }
-                                                }
-                                            }
-                                            input.close()
-                                            output.close()
-                                        } else {
-                                            withContext(Dispatchers.Main) {
-                                                Toast.makeText(this@GameListActivity, "Error accessing file stream.", Toast.LENGTH_LONG).show()
-                                                progressDialog.dismiss()
-                                            }
-                                            return@launch
-                                        }
-                                    // Insert download record into DB
-                                    val db = RommDatabaseHelper(this@GameListActivity)
-                                    db.insertDownload(platformSlug, fileName)
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val request = Request.Builder().url(downloadUrl).header("Authorization", Credentials.basic(user, pass)).build()
+                                val response = client.newCall(request).execute()
+                                if (!response.isSuccessful) {
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@GameListActivity, "Downloaded to $platformSlug/$fileName", Toast.LENGTH_LONG).show()
-                                        progressDialog.dismiss()
+                                        Toast.makeText(this@GameListActivity, "Download failed: ${response.code}", Toast.LENGTH_LONG).show()
                                     }
-                                    } catch (e: Exception) {
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(this@GameListActivity, "Download error: ${e.message}", Toast.LENGTH_LONG).show()
-                                            progressDialog.dismiss()
-                                        }
-                                    }
+                                    return@launch
                                 }
-                            } else {
-                            // Assume normal file path, using ES-DE folder
-                            val outputPath = "$downloadDir/$esDeFolder/$fileName"
-                                val progressDialog = ProgressDialog(this@GameListActivity)
-                                progressDialog.setMessage("Downloading $fileName... 0%")
-                                progressDialog.setCancelable(false)
-                                progressDialog.show()
-
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    try {
-                                        val request = Request.Builder().url(downloadUrl).header("Authorization", Credentials.basic(user, pass)).build()
-                                        val response = client.newCall(request).execute()
-                                        if (!response.isSuccessful) {
-                                            withContext(Dispatchers.Main) {
-                                                Toast.makeText(this@GameListActivity, "Download failed: ${response.code}", Toast.LENGTH_LONG).show()
-                                                progressDialog.dismiss()
-                                            }
-                                            return@launch
+                                val input = response.body?.byteStream()
+                                val output = contentResolver.openOutputStream(outFile.uri)
+                                if (input != null && output != null) {
+                                    val buffer = ByteArray(8192)
+                                    var bytesRead: Int
+                                    var totalRead = 0L
+                                    val contentLength = response.body?.contentLength() ?: -1L
+                                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                                        output.write(buffer, 0, bytesRead)
+                                        totalRead += bytesRead
+                                        if (contentLength > 0) {
+                                                val percent = (totalRead * 100 / contentLength).toInt()
+                                                DownloadProgressTracker.updateProgress(fileName, percent, platformSlug, this@GameListActivity)
                                         }
-                                        val input = response.body?.byteStream()
-                                        val outputFile = java.io.File(outputPath)
-                                        outputFile.parentFile?.mkdirs()
-                                        val output = outputFile.outputStream()
-                                        if (input != null) {
-                                            val buffer = ByteArray(8192)
-                                            var bytesRead: Int
-                                            var totalRead = 0L
-                                            val contentLength = response.body?.contentLength() ?: -1L
-                                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                                output.write(buffer, 0, bytesRead)
-                                                totalRead += bytesRead
-                                                if (contentLength > 0) {
-                                                    val percent = (totalRead * 100 / contentLength).toInt()
-                                                    withContext(Dispatchers.Main) {
-                                                        progressDialog.setMessage("Downloading $fileName... $percent%")
-                                                    }
-                                                }
-                                            }
-                                            input.close()
-                                            output.close()
-                                        } else {
-                                            withContext(Dispatchers.Main) {
-                                                Toast.makeText(this@GameListActivity, "Error accessing file stream.", Toast.LENGTH_LONG).show()
-                                                progressDialog.dismiss()
-                                            }
-                                            return@launch
-                                        }
-                                    // Insert download record into DB
-                                    val db = RommDatabaseHelper(this@GameListActivity)
-                                    db.insertDownload(platformSlug, fileName)
+                                    }
+                                    input.close()
+                                    output.close()
+                                } else {
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@GameListActivity, "Downloaded to $outputPath", Toast.LENGTH_LONG).show()
-                                        progressDialog.dismiss()
+                                        Toast.makeText(this@GameListActivity, "Error accessing file stream.", Toast.LENGTH_LONG).show()
                                     }
-                                    } catch (e: Exception) {
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(this@GameListActivity, "Download error: ${e.message}", Toast.LENGTH_LONG).show()
-                                            progressDialog.dismiss()
-                                        }
-                                    }
+                                    return@launch
+                                }
+                                // Insert download record into DB
+                                val db = RommDatabaseHelper(this@GameListActivity)
+                                db.insertDownloadsBatch(listOf(platformSlug to fileName))
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@GameListActivity, "Downloaded to $platformSlug/$fileName", Toast.LENGTH_LONG).show()
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@GameListActivity, "Download error: ${e.message}", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
-                    })
+                            } else {
+                            // Assume normal file path, using ES-DE folder
+                            val outputPath = "$downloadDir/$esDeFolder/$fileName"
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val request = Request.Builder().url(downloadUrl).header("Authorization", Credentials.basic(user, pass)).build()
+                                val response = client.newCall(request).execute()
+                                if (!response.isSuccessful) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@GameListActivity, "Download failed: ${response.code}", Toast.LENGTH_LONG).show()
+                                    }
+                                    return@launch
+                                }
+                                val input = response.body?.byteStream()
+                                val outputFile = java.io.File(outputPath)
+                                outputFile.parentFile?.mkdirs()
+                                val output = outputFile.outputStream()
+                                if (input != null) {
+                                    val buffer = ByteArray(8192)
+                                    var bytesRead: Int
+                                    var totalRead = 0L
+                                    val contentLength = response.body?.contentLength() ?: -1L
+                                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                                        output.write(buffer, 0, bytesRead)
+                                        totalRead += bytesRead
+                                        if (contentLength > 0) {
+                                                val percent = (totalRead * 100 / contentLength).toInt()
+                                                DownloadProgressTracker.updateProgress(fileName, percent, platformSlug, this@GameListActivity)
+                                        }
+                                    }
+                                    input.close()
+                                    output.close()
+                                } else {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@GameListActivity, "Error accessing file stream.", Toast.LENGTH_LONG).show()
+                                    }
+                                    return@launch
+                                }
+                                // Insert download record into DB
+                                val db = RommDatabaseHelper(this@GameListActivity)
+                                db.insertDownloadsBatch(listOf(platformSlug to fileName))
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@GameListActivity, "Downloaded to $outputPath", Toast.LENGTH_LONG).show()
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@GameListActivity, "Download error: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                            }
+                        }
+                    }, this@GameListActivity)
                     recyclerView.adapter = adapter
                 }
+                // === Begin WorkManager progress observer example ===
+                // Example: create and enqueue work request, then observe progress
+                // You may want to move this logic to where you actually want to trigger the worker!
+                val workRequest = androidx.work.OneTimeWorkRequestBuilder<DownloadGameWorker>()
+                    .setInputData(androidx.work.workDataOf("apiUrl" to "http://your.api.url")) // adjust input as needed
+                    .build()
+
+                androidx.work.WorkManager.getInstance(this@GameListActivity).enqueue(workRequest)
+
+                withContext(Dispatchers.Main) {
+                    androidx.work.WorkManager.getInstance(this@GameListActivity).getWorkInfoByIdLiveData(workRequest.id)
+                        .observe(this@GameListActivity) { workInfo ->
+                            if (workInfo != null && workInfo.state == androidx.work.WorkInfo.State.RUNNING) {
+                                val progress = workInfo.progress.getInt("progress", 0)
+                                android.util.Log.d("WorkProgress", "Download progress: $progress%")
+                                // Update progress emoji on each visible game item
+                                val recyclerView = findViewById<RecyclerView>(R.id.game_list_view)
+                                val adapter = recyclerView.adapter as? GameAdapter
+                                val fileName = workInfo.progress.getString("fileName")
+                                if (!fileName.isNullOrEmpty()) {
+                                    adapter?.updateDownloadProgress(fileName, progress)
+                                }
+                            }
+                        }
+                }
+                // === End WorkManager progress observer example ===
             } finally {
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
@@ -501,6 +513,9 @@ class GameListActivity : AppCompatActivity() {
             val user = intent.getStringExtra("USER") ?: ""
             val pass = intent.getStringExtra("PASS") ?: ""
 
+            // Collect downloads to batch insert after all downloads
+            val downloadsToInsert = mutableListOf<Pair<String, String>>()
+
             for ((index, game) in gamesToDownload.withIndex()) {
                 withContext(Dispatchers.Main) {
                     progressDialog.setMessage("Downloading ${index + 1} of ${gamesToDownload.size}")
@@ -520,6 +535,7 @@ class GameListActivity : AppCompatActivity() {
                 val downloadUrl = "http://$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
 
                 // --- Begin new logic for SAF and file paths ---
+                var downloadSucceeded = false
                 if (downloadDir.startsWith("content://")) {
                     val dirUri = Uri.parse(downloadDir)
                     val docFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(this@GameListActivity, dirUri)
@@ -543,10 +559,23 @@ class GameListActivity : AppCompatActivity() {
                         }
                         response.body?.byteStream()?.use { input ->
                             contentResolver.openOutputStream(outFile.uri)?.use { output ->
-                                input.copyTo(output)
+                                val buffer = ByteArray(8192)
+                                var bytesRead: Int
+                                var totalRead = 0L
+                                val contentLength = response.body?.contentLength() ?: -1L
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    totalRead += bytesRead
+                                    if (contentLength > 0) {
+                                        val percent = (totalRead * 100 / contentLength).toInt()
+                                        DownloadProgressTracker.updateProgress(fileName, percent, platformSlug, this@GameListActivity)
+                                    }
+                                }
                             } ?: Log.e("BulkDownload", "Could not open output stream for $fileName")
                         }
-                        db.insertDownload(platformSlug, fileName)
+                        //db.insertDownload(platformSlug, fileName)
+                        downloadsToInsert.add(platformSlug to fileName)
+                        downloadSucceeded = true
                     } catch (e: Exception) {
                         Log.e("BulkDownload", "Error downloading $fileName", e)
                     }
@@ -566,16 +595,32 @@ class GameListActivity : AppCompatActivity() {
                         }
                         response.body?.byteStream()?.use { input ->
                             outputFile.outputStream().use { output ->
-                                input.copyTo(output)
+                                val buffer = ByteArray(8192)
+                                var bytesRead: Int
+                                var totalRead = 0L
+                                val contentLength = response.body?.contentLength() ?: -1L
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    totalRead += bytesRead
+                                    if (contentLength > 0) {
+                                        val percent = (totalRead * 100 / contentLength).toInt()
+                                        DownloadProgressTracker.updateProgress(fileName, percent, platformSlug, this@GameListActivity)
+                                    }
+                                }
                             }
                         }
-                        db.insertDownload(platformSlug, fileName)
+                        //db.insertDownload(platformSlug, fileName)
+                        downloadsToInsert.add(platformSlug to fileName)
+                        downloadSucceeded = true
                     } catch (e: Exception) {
                         Log.e("BulkDownload", "Error downloading $fileName", e)
                     }
                 }
                 // --- End new logic for SAF and file paths ---
             }
+
+            // Batch insert all downloads at once
+            db.insertDownloadsBatch(downloadsToInsert)
 
             withContext(Dispatchers.Main) {
                 progressDialog.dismiss()

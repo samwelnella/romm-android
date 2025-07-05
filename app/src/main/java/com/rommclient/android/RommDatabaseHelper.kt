@@ -22,21 +22,30 @@ class RommDatabaseHelper(context: Context) : SQLiteOpenHelper(context, "romm.db"
 
     fun isDownloaded(platformSlug: String, fileName: String): Boolean {
         val db = readableDatabase
-        return db.rawQuery(
+        val cursor = db.rawQuery(
             "SELECT 1 FROM downloaded_roms WHERE platform_slug=? AND file_name=?",
             arrayOf(platformSlug, fileName)
-        ).use { cursor ->
-            cursor.moveToFirst()
-        }
+        )
+        val exists = cursor.moveToFirst()
+        android.util.Log.d("RommDB", "isDownloaded($platformSlug, $fileName): $exists")
+        cursor.close()
+        db.close()
+        return exists
     }
 
     fun insertDownload(platformSlug: String, fileName: String) {
-        val db = writableDatabase
-        val values = ContentValues().apply {
-            put("platform_slug", platformSlug)
-            put("file_name", fileName)
+        writableDatabase.use { db ->
+            val values = ContentValues().apply {
+                put("platform_slug", platformSlug)
+                put("file_name", fileName)
+            }
+            val result = db.insertWithOnConflict("downloaded_roms", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+            if (result != -1L) {
+                android.util.Log.d("RommDB", "insertDownload($platformSlug, $fileName): INSERTED")
+            } else {
+                android.util.Log.d("RommDB", "insertDownload($platformSlug, $fileName): ALREADY EXISTS")
+            }
         }
-        db.insertWithOnConflict("downloaded_roms", null, values, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
     fun getAllDownloads(): List<Pair<String, String>> {
@@ -49,6 +58,7 @@ class RommDatabaseHelper(context: Context) : SQLiteOpenHelper(context, "romm.db"
                 results.add(slug to file)
             }
         }
+        db.close()
         return results
     }
 
@@ -60,6 +70,7 @@ class RommDatabaseHelper(context: Context) : SQLiteOpenHelper(context, "romm.db"
                 results.add(cursor.getString(0))
             }
         }
+        db.close()
         return results
     }
 
@@ -71,11 +82,33 @@ class RommDatabaseHelper(context: Context) : SQLiteOpenHelper(context, "romm.db"
                 results.add(cursor.getString(0) to cursor.getString(1))
             }
         }
+        db.close()
         return results
     }
 
     fun deleteDownload(slug: String, fileName: String) {
         val db = writableDatabase
         db.delete("downloaded_roms", "platform_slug=? AND file_name=?", arrayOf(slug, fileName))
+        db.close()
+    }
+    // Batch insert downloads with transaction
+    fun insertDownloadsBatch(downloads: List<Pair<String, String>>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val stmt = db.compileStatement(
+                "INSERT OR IGNORE INTO downloaded_roms (platform_slug, file_name) VALUES (?, ?)"
+            )
+            for ((platformSlug, fileName) in downloads) {
+                stmt.bindString(1, platformSlug)
+                stmt.bindString(2, fileName)
+                stmt.executeInsert()
+                stmt.clearBindings()
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+            db.close()
+        }
     }
 }
