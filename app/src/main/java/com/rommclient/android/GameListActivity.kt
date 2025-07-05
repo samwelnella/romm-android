@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import android.view.View
+import android.widget.TextView
+import android.widget.Button
 import android.view.Menu
 import android.view.MenuItem
 
@@ -12,8 +14,6 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import android.widget.Button
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -29,60 +29,60 @@ import com.rommclient.android.GameAdapter
 
 // Map RomM platform slugs to ES-DE folder names
 private val esDeFolderMap = mapOf(
-    "3do" to "Panasonic 3DO",
-    "amiga" to "Commodore Amiga",
-    "arcade" to "Arcade",
-    "atari2600" to "Atari 2600",
-    "atari5200" to "Atari 5200",
-    "atari7800" to "Atari 7800",
-    "atari800" to "Atari 800",
-    "atarijaguar" to "Atari Jaguar",
-    "atarilynx" to "Atari Lynx",
-    "colecovision" to "ColecoVision",
-    "dreamcast" to "Sega Dreamcast",
-    "fds" to "Famicom Disk System",
-    "gb" to "Nintendo Game Boy",
-    "gba" to "Nintendo Game Boy Advance",
-    "gbc" to "Nintendo Game Boy Color",
-    "gc" to "Nintendo GameCube",
-    "genesis" to "Sega Genesis",
-    "gg" to "Sega Game Gear",
-    "intellivision" to "Mattel Intellivision",
-    "macintosh" to "Apple Macintosh",
-    "mastersystem" to "Sega Master System",
-    "megadrive" to "Sega Mega Drive",
-    "msx" to "MSX",
-    "n64" to "Nintendo 64",
-    "nds" to "Nintendo DS",
-    "neogeo" to "Neo Geo",
-    "nes" to "Nintendo Entertainment System",
-    "ngp" to "Neo Geo Pocket",
-    "ngpc" to "Neo Geo Pocket Color",
-    "pc" to "PC",
-    "pcengine" to "PC Engine",
-    "ps1" to "Sony PlayStation",
-    "ps2" to "Sony PlayStation 2",
-    "ps3" to "Sony PlayStation 3",
-    "psp" to "Sony PSP",
-    "saturn" to "Sega Saturn",
-    "scummvm" to "ScummVM",
-    "sega32x" to "Sega 32X",
-    "segacd" to "Sega CD",
-    "sg1000" to "Sega SG-1000",
-    "snes" to "Super Nintendo Entertainment System",
-    "switch" to "Nintendo Switch",
-    "tic80" to "TIC-80",
-    "trs80" to "TRS-80",
-    "vectrex" to "Vectrex",
-    "vic20" to "Commodore VIC-20",
-    "virtualboy" to "Nintendo Virtual Boy",
-    "wii" to "Nintendo Wii",
-    "wiiu" to "Nintendo Wii U",
-    "wswan" to "WonderSwan",
-    "wswancolor" to "WonderSwan Color",
-    "xbox" to "Microsoft Xbox",
-    "xbox360" to "Microsoft Xbox 360",
-    "zxspectrum" to "ZX Spectrum"
+    "3do" to "3do",
+    "amiga" to "amiga",
+    "arcade" to "arcade",
+    "atari2600" to "atari2600",
+    "atari5200" to "atari5200",
+    "atari7800" to "atari7800",
+    "atari800" to "atari800",
+    "atarijaguar" to "atarijaguar",
+    "atarilynx" to "atarilynx",
+    "colecovision" to "colecovision",
+    "dreamcast" to "dreamcast",
+    "fds" to "fds",
+    "gb" to "gb",
+    "gba" to "gba",
+    "gbc" to "gbc",
+    "gc" to "gc",
+    "genesis" to "genesis",
+    "gg" to "gamegear",
+    "intellivision" to "intellivision",
+    "macintosh" to "macintosh",
+    "mastersystem" to "mastersystem",
+    "megadrive" to "megadrive",
+    "msx" to "msx",
+    "n64" to "n64",
+    "nds" to "nds",
+    "neogeo" to "neogeo",
+    "nes" to "nes",
+    "ngp" to "ngp",
+    "ngpc" to "ngpc",
+    "pc" to "pc",
+    "pcengine" to "pcengine",
+    "ps1" to "ps1",
+    "ps2" to "ps2",
+    "ps3" to "ps3",
+    "psp" to "psp",
+    "saturn" to "saturn",
+    "scummvm" to "scummvm",
+    "sega32x" to "sega32x",
+    "segacd" to "segacd",
+    "sg1000" to "sg-1000",
+    "snes" to "snes",
+    "switch" to "switch",
+    "tic80" to "tic80",
+    "trs80" to "trs-80",
+    "vectrex" to "vectrex",
+    "vic20" to "vic20",
+    "virtualboy" to "virtualboy",
+    "wii" to "wii",
+    "wiiu" to "wiiu",
+    "wswan" to "wonderswan",
+    "wswancolor" to "wonderswancolor",
+    "xbox" to "xbox",
+    "xbox360" to "xbox360",
+    "zxspectrum" to "zxspectrum"
 )
 
 class GameListActivity : AppCompatActivity() {
@@ -107,6 +107,15 @@ class GameListActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_game_list)
 
+        // Set the title of the activity to the platform or collection name.
+        val platformName = intent.extras?.getString("PLATFORM_NAME")
+        val collectionName = intent.extras?.getString("COLLECTION_NAME")
+        title = when {
+            !collectionName.isNullOrBlank() -> collectionName
+            !platformName.isNullOrBlank() -> platformName
+            else -> "RomM Platforms"
+        }
+
         // Check and prompt for download directory if not already set
         val prefs = getSharedPreferences("romm_prefs", MODE_PRIVATE)
         val downloadDir = prefs.getString("download_directory", null)
@@ -120,12 +129,6 @@ class GameListActivity : AppCompatActivity() {
         val recyclerView = findViewById<RecyclerView>(R.id.game_list_view)
         recyclerView.layoutManager = LinearLayoutManager(this@GameListActivity)
 
-        // If R.id.btn_set_download_dir is defined in your activity_game_list.xml, uncomment the following lines:
-        // val btnSetDownloadDir = findViewById<Button?>(R.id.btn_set_download_dir)
-        // btnSetDownloadDir?.setOnClickListener {
-        //     // Launch folder picker
-        //     selectFolderLauncher.launch(null)
-        // }
 
         val progressDialog = ProgressDialog(this@GameListActivity)
         progressDialog.setMessage("Loading games... 0%")
@@ -161,11 +164,11 @@ class GameListActivity : AppCompatActivity() {
                     val url = when {
                         resolvedCollectionId != null -> {
                             Log.d("GameListActivity", "Using collection ID $resolvedCollectionId to fetch ROMs")
-                            "http://$host:$port/api/roms?collection_id=$resolvedCollectionId&limit=$limit&offset=$offset"
+                            "http://$host:$port/api/roms?collection_id=$resolvedCollectionId&limit=$limit&offset=$offset&expand=collection"
                         }
                         resolvedPlatformId != null -> {
                             Log.d("GameListActivity", "Using platform ID $resolvedPlatformId to fetch ROMs")
-                            "http://$host:$port/api/roms?platform_id=$resolvedPlatformId&limit=$limit&offset=$offset"
+                            "http://$host:$port/api/roms?platform_id=$resolvedPlatformId&limit=$limit&offset=$offset&expand=platform"
                         }
                         else -> {
                             Log.e("GameListActivity", "No valid platform or collection ID found in intent extras.")
@@ -198,6 +201,19 @@ class GameListActivity : AppCompatActivity() {
                     if (body.isNullOrEmpty()) break
 
                     val root = org.json.JSONObject(body)
+                    // Update the activity title based on returned platform or collection name, only for the first page
+                    if (offset == 0) {
+                        val newTitle = when {
+                            root.has("collection") -> root.getJSONObject("collection").optString("name", null)
+                            root.has("platform") -> root.getJSONObject("platform").optString("name", null)
+                            else -> null
+                        }
+                        if (!newTitle.isNullOrBlank()) {
+                            withContext(Dispatchers.Main) {
+                                title = newTitle
+                            }
+                        }
+                    }
                     if (totalCount == -1) {
                         totalCount = root.optInt("total", -1)
                     }

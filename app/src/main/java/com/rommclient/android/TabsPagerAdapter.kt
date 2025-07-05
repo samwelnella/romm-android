@@ -9,12 +9,10 @@ class TabsPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
     override fun getItemCount(): Int = 3
 
     override fun createFragment(position: Int): Fragment {
-        return if (position == 0) {
-            PlatformsFragment()
-        } else if (position == 1) {
-            CollectionsFragment()
-        } else {
-            LibraryFragment()
+        return when (position) {
+            0 -> PlatformsFragment()
+            1 -> CollectionsFragment()
+            else -> LibraryFragment()
         }
     }
 }

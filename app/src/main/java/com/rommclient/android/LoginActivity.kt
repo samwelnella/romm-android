@@ -17,7 +17,6 @@ class LoginActivity : AppCompatActivity() {
             && sharedPrefs.contains("user") && sharedPrefs.contains("pass")) {
             startActivity(Intent(this, MainActivity::class.java))
             finish()
-            return
         }
 
         setContentView(R.layout.activity_login)
@@ -29,24 +28,27 @@ class LoginActivity : AppCompatActivity() {
         val loginButton = findViewById<Button>(R.id.loginButton)
 
         loginButton.setOnClickListener {
-            val host = hostInput.text.toString()
-            val port = portInput.text.toString()
-            val user = userInput.text.toString()
-            val pass = passInput.text.toString()
+            val host = hostInput.text.toString().trim()
+            val port = portInput.text.toString().trim()
+            val user = userInput.text.toString().trim()
+            val pass = passInput.text.toString().trim()
 
-            if (host.isBlank() || port.isBlank() || user.isBlank() || pass.isBlank()) {
+            if (isAnyBlank(host, port, user, pass)) {
                 Toast.makeText(this, "Please fill in all fields", Toast.LENGTH_SHORT).show()
-            } else {
-                sharedPrefs.edit().apply {
-                    putString("host", host)
-                    putString("port", port)
-                    putString("user", user)
-                    putString("pass", pass)
-                    apply()
-                }
-                startActivity(Intent(this, MainActivity::class.java))
-                finish()
+                return@setOnClickListener
             }
+
+            val editor = sharedPrefs.edit().apply {
+                putString("host", host)
+                putString("port", port)
+                putString("user", user)
+                putString("pass", pass)
+            }
+            editor.apply()
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
         }
     }
+
+    private fun isAnyBlank(vararg fields: String) = fields.any { it.isBlank() }
 }

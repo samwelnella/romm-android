@@ -1,9 +1,7 @@
-
 package com.rommclient.android
 
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.documentfile.provider.DocumentFile
@@ -26,6 +24,37 @@ class LibraryGamesActivity : AppCompatActivity() {
         val db = RommDatabaseHelper(this)
         val files = db.getDownloadsForSlug(slug)
 
+        val prefs = getSharedPreferences("romm_prefs", MODE_PRIVATE)
+        val uri = Uri.parse(prefs.getString("download_directory", null))
+        val baseDir = DocumentFile.fromTreeUri(this, uri)
+
+        fun confirmDelete(fileName: String) {
+            AlertDialog.Builder(this@LibraryGamesActivity)
+                .setTitle("Delete Game")
+                .setMessage("Are you sure you want to delete \"$fileName\"?")
+                .setPositiveButton("Delete") { dialogInterface: DialogInterface, which: Int ->
+                    try {
+                        val platformDir = baseDir?.findFile(slug)
+                        val gameFile = platformDir?.findFile(fileName)
+
+                        if (gameFile != null && gameFile.exists()) {
+                            if (!gameFile.delete()) {
+                                Toast.makeText(this@LibraryGamesActivity, "Could not delete file", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(this@LibraryGamesActivity, "File not found", Toast.LENGTH_SHORT).show()
+                        }
+
+                        db.deleteDownload(slug, fileName)
+                        recreate()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@LibraryGamesActivity, "Failed to delete", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
         for ((platform, fileName) in files) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -36,39 +65,17 @@ class LibraryGamesActivity : AppCompatActivity() {
                 val deleteBtn = Button(this@LibraryGamesActivity).apply {
                     text = "🗑"
                     setOnClickListener {
-                        AlertDialog.Builder(this@LibraryGamesActivity)
-                            .setTitle("Delete Game")
-                            .setMessage("Are you sure you want to delete \"$fileName\"?")
-                            .setPositiveButton("Delete") { dialogInterface: DialogInterface, which: Int ->
-                                try {
-                                    val prefs = getSharedPreferences("romm_prefs", MODE_PRIVATE)
-                                    val uri = Uri.parse(prefs.getString("download_directory", null))
-                                    val baseDir = DocumentFile.fromTreeUri(this@LibraryGamesActivity, uri)
-                                    val platformDir = baseDir?.findFile(slug)
-                                    val gameFile = platformDir?.findFile(fileName)
-
-                                    if (gameFile != null && gameFile.exists()) {
-                                        if (!gameFile.delete()) {
-                                            Toast.makeText(this@LibraryGamesActivity, "Could not delete file", Toast.LENGTH_SHORT).show()
-                                        }
-                                    } else {
-                                        Toast.makeText(this@LibraryGamesActivity, "File not found", Toast.LENGTH_SHORT).show()
-                                    }
-
-                                    db.deleteDownload(slug, fileName)
-                                    recreate()
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@LibraryGamesActivity, "Failed to delete", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            .setNegativeButton("Cancel", null)
-                            .show()
+                        confirmDelete(fileName)
                     }
                 }
                 addView(fileText)
                 addView(deleteBtn)
             }
             layout.addView(row)
+
+            val spacer = Space(this@LibraryGamesActivity)
+            spacer.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 12)
+            layout.addView(spacer)
         }
     }
 }

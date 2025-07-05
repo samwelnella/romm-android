@@ -1,7 +1,6 @@
 package com.rommclient.android
 
 import android.content.Context
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,7 +15,7 @@ class GameAdapter(
     private val listener: GameClickListener
 ) : RecyclerView.Adapter<GameAdapter.GameViewHolder>() {
 
-        
+
     interface GameClickListener {
         fun onDownloadClick(game: JSONObject)
     }
@@ -43,16 +42,17 @@ class GameAdapter(
 
         val regionArray = game.optJSONArray("regions")
         val regionRaw = if (regionArray != null && regionArray.length() > 0) {
-            regionArray.getString(0).trim().uppercase()
+            regionArray.getString(0).trim()
         } else {
             ""
         }
-        val emoji = when {
-            regionRaw.contains("USA") || regionRaw == "US" || regionRaw == "NA" -> "🇺🇸"
-            regionRaw.contains("JPN") || regionRaw == "JP" || regionRaw == "JAPAN" -> "🇯🇵"
-            regionRaw.contains("EUR") || regionRaw == "EU" -> "🇪🇺"
-            regionRaw.contains("KOR") || regionRaw == "KR" -> "\uD83C\uDDF0\uD83C\uDDF7"
-            regionRaw.contains("WORLD") -> "\uD83C\uDDFA\uD83C\uDDF3"
+        val normalizedRegion = regionRaw.replace("-", "").replace("_", "").uppercase()
+        val emoji = when (normalizedRegion) {
+            "USA", "US", "NA" -> "🇺🇸"
+            "JPN", "JP", "JAPAN" -> "🇯🇵"
+            "EUR", "EU" -> "🇪🇺"
+            "KOR", "KR" -> "\uD83C\uDDF0\uD83C\uDDF7"
+            "WORLD" -> "\uD83C\uDDFA\uD83C\uDDF3"
             else -> "\u2753"
         }
 
@@ -71,16 +71,4 @@ class GameAdapter(
     }
 
     override fun getItemCount(): Int = games.size
-}
-    
-
-private fun regionToFlag(region: String): String {
-    return when (region.uppercase()) {
-        "US", "USA", "NA" -> "🇺🇸"
-        "JP", "JPN" -> "🇯🇵"
-        "EU", "EUR" -> "🇪🇺"
-        "FR" -> "🇫🇷"
-        "CA" -> "🇨🇦"
-        else -> "🌐"
-    }
 }

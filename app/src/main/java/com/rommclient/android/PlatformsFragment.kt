@@ -9,6 +9,7 @@ import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.*
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
@@ -26,18 +27,20 @@ class PlatformsFragment : Fragment() {
         val root = inflater.inflate(R.layout.fragment_list, container, false)
         val listView = root.findViewById<ListView>(R.id.listView)
 
-        val prefs = requireContext().getSharedPreferences("RomMConfig", 0)
+        val context = requireContext()
+
+        val prefs = context.getSharedPreferences("RomMConfig", 0)
         val host = prefs.getString("host", null)
         val port = prefs.getString("port", null)
         val user = prefs.getString("user", null)
         val pass = prefs.getString("pass", null)
 
         if (host.isNullOrBlank() || port.isNullOrBlank() || user.isNullOrBlank() || pass.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Missing connection info", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Missing connection info", Toast.LENGTH_LONG).show()
             return root
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val request = Request.Builder()
                     .url("http://$host:$port/api/platforms")
@@ -56,15 +59,20 @@ class PlatformsFragment : Fragment() {
 
                 withContext(Dispatchers.Main) {
                     val names = items.map { it.first }
-                    listView.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, names)
+                    listView.adapter = ArrayAdapter(
+                        context,
+                        android.R.layout.simple_list_item_1,
+                        names
+                    )
                     listView.setOnItemClickListener { _, _, position, _ ->
-                        val platformId = items[position].second
-                        val intent = Intent(requireContext(), GameListActivity::class.java).apply {
+                        val (platformName, platformId) = items[position]
+                        val intent = Intent(context, GameListActivity::class.java).apply {
                             putExtra("HOST", host)
                             putExtra("PORT", port)
                             putExtra("USER", user)
                             putExtra("PASS", pass)
                             putExtra("PLATFORM_ID", platformId)
+                            putExtra("PLATFORM_NAME", platformName)
                         }
                         startActivity(intent)
                     }
@@ -72,7 +80,11 @@ class PlatformsFragment : Fragment() {
 
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "Failed to load platforms: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        context,
+                        "Failed to load platforms: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }

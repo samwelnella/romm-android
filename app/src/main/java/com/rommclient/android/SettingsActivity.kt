@@ -46,10 +46,10 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         saveButton.setOnClickListener {
-            val host = hostInput.text.toString()
-            val port = portInput.text.toString()
-            val user = userInput.text.toString()
-            val pass = passInput.text.toString()
+            val host = hostInput.text.toString().trim()
+            val port = portInput.text.toString().trim()
+            val user = userInput.text.toString().trim()
+            val pass = passInput.text.toString().trim()
 
             if (host.isBlank() || port.isBlank() || user.isBlank() || pass.isBlank()) {
                 Toast.makeText(this, "All fields are required.", Toast.LENGTH_SHORT).show()

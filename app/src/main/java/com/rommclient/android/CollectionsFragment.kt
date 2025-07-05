@@ -1,13 +1,11 @@
 package com.rommclient.android
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import androidx.fragment.app.Fragment
@@ -19,11 +17,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 
 class CollectionsFragment : Fragment() {
     private val client = OkHttpClient()
-    private lateinit var collectionListView: ListView
     private var collections: JSONArray = JSONArray()
 
     override fun onCreateView(
@@ -43,8 +39,7 @@ class CollectionsFragment : Fragment() {
             Toast.makeText(requireContext(), "Missing host/port/user/pass", Toast.LENGTH_LONG).show()
             return view
         }
-
-        val client = OkHttpClient()
+        // removed duplicate client
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -55,11 +50,11 @@ class CollectionsFragment : Fragment() {
                 val json = response.body?.string() ?: "[]"
                 val array = JSONArray(json)
 
-                val collections = mutableListOf<JSONObject>()
+                val collectionObjects = mutableListOf<JSONObject>()
                 val names = mutableListOf<String>()
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    collections.add(obj)
+                    collectionObjects.add(obj)
                     names.add(obj.getString("name"))
                 }
 
@@ -68,13 +63,14 @@ class CollectionsFragment : Fragment() {
                     listView.adapter = adapter
 
                     listView.setOnItemClickListener { _, _, position, _ ->
-                        val selected = collections[position]
+                        val selected = collectionObjects[position]
                         val intent = Intent(requireContext(), GameListActivity::class.java)
                         intent.putExtra("COLLECTION_ID", selected.getInt("id"))
                         intent.putExtra("HOST", host)
                         intent.putExtra("PORT", port)
                         intent.putExtra("USER", user)
                         intent.putExtra("PASS", pass)
+                        intent.putExtra("COLLECTION_NAME", selected.getString("name"))
                         startActivity(intent)
                     }
                 }

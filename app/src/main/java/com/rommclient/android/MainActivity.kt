@@ -22,7 +22,11 @@ class MainActivity : AppCompatActivity() {
         viewPager.adapter = TabsPagerAdapter(this)
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
-            tab.text = if (position == 0) "Platforms" else if (position == 1) "Collections" else "Library"
+            tab.text = when (position) {
+                0 -> "Platforms"
+                1 -> "Collections"
+                else -> "Library"
+            }
         }.attach()
     }
 
