@@ -1,54 +1,87 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:layout_height="match_parent">
 
-    <EditText
-        android:id="@+id/settings_host_input"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/settings_root"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Host" />
+        android:padding="24dp">
 
-    <EditText
-        android:id="@+id/settings_port_input"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Port"
-        android:inputType="number" />
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/settings_host_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Host"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-    <EditText
-        android:id="@+id/settings_user_input"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Username" />
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/settings_port_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Port"
+            android:inputType="number"
+            app:layout_constraintTop_toBottomOf="@id/settings_host_input"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp" />
 
-    <EditText
-        android:id="@+id/settings_pass_input"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Password"
-        android:inputType="textPassword" />
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/settings_user_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Username"
+            app:layout_constraintTop_toBottomOf="@id/settings_port_input"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp" />
 
-    <TextView
-        android:id="@+id/download_path"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Current download directory: Not set"
-        android:textSize="16sp"
-        android:paddingBottom="12dp" />
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/settings_pass_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Password"
+            android:inputType="textPassword"
+            app:layout_constraintTop_toBottomOf="@id/settings_user_input"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp" />
 
-    <Button
-        android:id="@+id/select_directory_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Select Download Directory" />
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/download_path_container"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Download Directory"
+            app:endIconDrawable="@android:drawable/ic_menu_save"
+            app:endIconMode="custom"
+            app:layout_constraintTop_toBottomOf="@id/settings_pass_input"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp">
 
-    <Button
-        android:id="@+id/save_settings_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Save" />
-</LinearLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/download_path_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:clickable="true"
+                android:inputType="text"
+                android:text="Not set" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/save_settings_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Save"
+            app:layout_constraintTop_toBottomOf="@id/download_path_container"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="24dp" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

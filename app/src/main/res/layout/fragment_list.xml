@@ -1,10 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
+<FrameLayout xmlns:ns0="http://schemas.android.com/apk/res/android" ns0:layout_width="match_parent" ns0:layout_height="match_parent">
 
-    <ListView
-        android:id="@+id/listView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+    <ListView ns0:id="@+id/listView" ns0:layout_width="match_parent" ns0:layout_height="match_parent" />
 </FrameLayout>

@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+
+import android.content.SharedPreferences
+import androidx.appcompat.app.AppCompatDelegate
+
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -20,6 +24,8 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+
+
         val prefs = getSharedPreferences("romm_prefs", Context.MODE_PRIVATE)
 
         val hostInput = findViewById<EditText>(R.id.settings_host_input)
@@ -33,13 +39,13 @@ class SettingsActivity : AppCompatActivity() {
         userInput.setText(prefs.getString("username", ""))
         passInput.setText(prefs.getString("password", ""))
 
-        val downloadPathView = findViewById<TextView>(R.id.download_path)
-        val selectButton = findViewById<Button>(R.id.select_directory_button)
+        val directoryInput = findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.download_path_input)
+        val directoryLayout = findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.download_path_container)
 
-        val downloadDir = prefs.getString("download_dir", "Not set")
-        downloadPathView.text = "Current download directory: $downloadDir"
+        val downloadDir = prefs.getString("download_directory", "Not set")
+        directoryInput.setText(downloadDir)
 
-        selectButton.setOnClickListener {
+        directoryLayout.setEndIconOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             startActivityForResult(intent, 1001)
@@ -50,9 +56,10 @@ class SettingsActivity : AppCompatActivity() {
             val port = portInput.text.toString().trim()
             val user = userInput.text.toString().trim()
             val pass = passInput.text.toString().trim()
+            val downloadDir = prefs.getString("download_directory", null)
 
-            if (host.isBlank() || port.isBlank() || user.isBlank() || pass.isBlank()) {
-                Toast.makeText(this, "All fields are required.", Toast.LENGTH_SHORT).show()
+            if (host.isBlank() || port.isBlank() || user.isBlank() || pass.isBlank() || downloadDir.isNullOrBlank()) {
+                Toast.makeText(this, "All fields and a download directory are required.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -65,6 +72,7 @@ class SettingsActivity : AppCompatActivity() {
             }
 
             Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, MainActivity::class.java))
             finish()
         }
     }
@@ -76,10 +84,10 @@ class SettingsActivity : AppCompatActivity() {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
 
             val prefs = getSharedPreferences("romm_prefs", Context.MODE_PRIVATE)
-            prefs.edit().putString("download_dir", uri.toString()).apply()
+            prefs.edit().putString("download_directory", uri.toString()).apply()
 
-            val downloadPathView = findViewById<TextView>(R.id.download_path)
-            downloadPathView.text = "Current download directory: $uri"
+            val directoryInput = findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.download_path_input)
+            directoryInput.setText(uri.toString())
         }
     }
 }

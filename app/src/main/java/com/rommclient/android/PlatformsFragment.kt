@@ -1,5 +1,8 @@
 package com.rommclient.android
 
+
+import android.util.Log
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -15,6 +18,7 @@ import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import androidx.appcompat.app.AppCompatActivity
 
 class PlatformsFragment : Fragment() {
     private val client = OkHttpClient()
@@ -29,11 +33,11 @@ class PlatformsFragment : Fragment() {
 
         val context = requireContext()
 
-        val prefs = context.getSharedPreferences("RomMConfig", 0)
-        val host = prefs.getString("host", null)
-        val port = prefs.getString("port", null)
-        val user = prefs.getString("user", null)
-        val pass = prefs.getString("pass", null)
+        val prefs = requireActivity().getSharedPreferences("romm_prefs",AppCompatActivity.MODE_PRIVATE)
+        val host = prefs.getString("host", "") ?: ""
+        val port = prefs.getString("port", "") ?: ""
+        val user = prefs.getString("username", "") ?: ""
+        val pass = prefs.getString("password", "") ?: ""
 
         if (host.isNullOrBlank() || port.isNullOrBlank() || user.isNullOrBlank() || pass.isNullOrBlank()) {
             Toast.makeText(context, "Missing connection info", Toast.LENGTH_LONG).show()
@@ -42,6 +46,7 @@ class PlatformsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
+                Log.d("PlatformsFragment", "Fetching platforms from http://$host:$port/api/platforms")
                 val request = Request.Builder()
                     .url("http://$host:$port/api/platforms")
                     .addHeader("Authorization", Credentials.basic(user, pass))
@@ -68,11 +73,11 @@ class PlatformsFragment : Fragment() {
                         val (platformName, platformId) = items[position]
                         val intent = Intent(context, GameListActivity::class.java).apply {
                             putExtra("HOST", host)
-                            putExtra("PORT", port)
-                            putExtra("USER", user)
-                            putExtra("PASS", pass)
+                            putExtra("PORT", port as String?)
+                            putExtra("USER", user as String?)
+                            putExtra("PASS", pass as String?)
                             putExtra("PLATFORM_ID", platformId)
-                            putExtra("PLATFORM_NAME", platformName)
+                            putExtra("PLATFORM_NAME", platformName as String)
                         }
                         startActivity(intent)
                     }

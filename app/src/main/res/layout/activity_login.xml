@@ -1,44 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
+<ScrollView xmlns:ns0="http://schemas.android.com/apk/res/android" ns0:layout_width="match_parent" ns0:layout_height="match_parent">
 
-    <LinearLayout
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+    <LinearLayout ns0:orientation="vertical" ns0:padding="16dp" ns0:layout_width="match_parent" ns0:layout_height="wrap_content">
 
-        <EditText
-            android:id="@+id/hostEditText"
-            android:hint="Host"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+        <com.google.android.material.textfield.TextInputEditText ns0:id="@+id/hostEditText" ns0:hint="Host" ns0:layout_width="match_parent" ns0:layout_height="wrap_content" />
 
-        <EditText
-            android:id="@+id/portEditText"
-            android:hint="Port"
-            android:inputType="number"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+        <com.google.android.material.textfield.TextInputEditText ns0:id="@+id/portEditText" ns0:hint="Port" ns0:inputType="number" ns0:layout_width="match_parent" ns0:layout_height="wrap_content" />
 
-        <EditText
-            android:id="@+id/userEditText"
-            android:hint="Username"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+        <com.google.android.material.textfield.TextInputEditText ns0:id="@+id/userEditText" ns0:hint="Username" ns0:layout_width="match_parent" ns0:layout_height="wrap_content" />
 
-        <EditText
-            android:id="@+id/passEditText"
-            android:hint="Password"
-            android:inputType="textPassword"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+        <com.google.android.material.textfield.TextInputEditText ns0:id="@+id/passEditText" ns0:hint="Password" ns0:inputType="textPassword" ns0:layout_width="match_parent" ns0:layout_height="wrap_content" />
 
-        <Button
-            android:id="@+id/loginButton"
-            android:text="Connect"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+        <com.google.android.material.button.MaterialButton ns0:id="@+id/loginButton" ns0:text="Connect" ns0:layout_width="match_parent" ns0:layout_height="wrap_content" />
     </LinearLayout>
 </ScrollView>

@@ -115,21 +115,26 @@ class GameListActivity : AppCompatActivity() {
         val viewModel: GameListViewModel by viewModels()
         setContentView(R.layout.activity_game_list)
 
-        // Set the title of the activity to the platform or collection name.
+        // Set up the toolbar and set the title dynamically.
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        setSupportActionBar(toolbar)
+
         val platformName = intent.extras?.getString("PLATFORM_NAME")
         val collectionName = intent.extras?.getString("COLLECTION_NAME")
-        title = when {
+        val name = when {
             !collectionName.isNullOrBlank() -> collectionName
             !platformName.isNullOrBlank() -> platformName
             else -> "RomM Platforms"
         }
+        supportActionBar?.title = name
 
         // Check and prompt for download directory if not already set
         val prefs = getSharedPreferences("romm_prefs", MODE_PRIVATE)
         val downloadDir = prefs.getString("download_directory", null)
         if (downloadDir == null) {
-            Toast.makeText(this, "Please select a download directory", Toast.LENGTH_LONG).show()
-            selectFolderLauncher.launch(null)
+            Toast.makeText(this, "Please set your download directory in Settings first.", Toast.LENGTH_LONG).show()
+            finish()
+            return
         }
 
         // Remove intent credential reading here; handle inside coroutine below
@@ -138,11 +143,12 @@ class GameListActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this@GameListActivity)
 
 
-        val progressDialog = ProgressDialog(this@GameListActivity)
-        progressDialog.setMessage("Loading games... 0%")
-        progressDialog.setCancelable(false)
-
-        progressDialog.show()
+        // Show loading dialog using LoadingDialogFragment
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                LoadingDialogFragment.show(supportFragmentManager)
+            }
+        }
 
         CoroutineScope(Dispatchers.IO).launch {
             // Revert to using intent extras for credentials as previously
@@ -218,7 +224,7 @@ class GameListActivity : AppCompatActivity() {
                         }
                         if (!newTitle.isNullOrBlank()) {
                             withContext(Dispatchers.Main) {
-                                title = newTitle
+                                supportActionBar?.title = newTitle
                             }
                         }
                     }
@@ -240,7 +246,7 @@ class GameListActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) {
                         val totalSoFar = roms.size
                         val percent = if (totalCount > 0) (totalSoFar * 100 / totalCount).coerceAtMost(100) else 100
-                        progressDialog.setMessage("Loading games... $percent%")
+                        LoadingDialogFragment.updateMessage(supportFragmentManager, "Loading games... $percent%")
                     }
 
                     offset += items.length()
@@ -423,7 +429,7 @@ class GameListActivity : AppCompatActivity() {
                 // === End WorkManager progress observer example ===
             } finally {
                 withContext(Dispatchers.Main) {
-                    progressDialog.dismiss()
+                    LoadingDialogFragment.dismiss(supportFragmentManager)
                 }
             }
         }
@@ -579,6 +585,14 @@ class GameListActivity : AppCompatActivity() {
                     } catch (e: Exception) {
                         Log.e("BulkDownload", "Error downloading $fileName", e)
                     }
+                    // UI progress update on download succeeded (SAF branch)
+                    if (downloadSucceeded) {
+                        withContext(Dispatchers.Main) {
+                            val recyclerView = findViewById<RecyclerView>(R.id.game_list_view)
+                            val adapter = recyclerView.adapter as? GameAdapter
+                            adapter?.updateDownloadProgress(fileName, 100)
+                        }
+                    }
                 } else {
                     val outputPath = "$downloadDir/$esDeFolder/$fileName"
                     val outputFile = File(outputPath)
@@ -614,6 +628,14 @@ class GameListActivity : AppCompatActivity() {
                         downloadSucceeded = true
                     } catch (e: Exception) {
                         Log.e("BulkDownload", "Error downloading $fileName", e)
+                    }
+                    // UI progress update on download succeeded (non-SAF branch)
+                    if (downloadSucceeded) {
+                        withContext(Dispatchers.Main) {
+                            val recyclerView = findViewById<RecyclerView>(R.id.game_list_view)
+                            val adapter = recyclerView.adapter as? GameAdapter
+                            adapter?.updateDownloadProgress(fileName, 100)
+                        }
                     }
                 }
                 // --- End new logic for SAF and file paths ---

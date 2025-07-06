@@ -14,7 +14,32 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Ensure we always use "romm_prefs" as preferences file name
+        val prefs = getSharedPreferences("romm_prefs", MODE_PRIVATE)
+        val host = prefs.getString("host", null)
+        android.util.Log.d("MainActivity", "Loaded host: $host")
+        val downloadDir = prefs.getString("download_directory", null)
+        android.util.Log.d("MainActivity", "Loaded downloadDir: $downloadDir")
+
+        if (host.isNullOrBlank() || downloadDir.isNullOrBlank()) {
+            // Optionally log what's missing
+            if (host.isNullOrBlank()) {
+                android.util.Log.w("MainActivity", "Missing or blank 'host' in preferences")
+            }
+            if (downloadDir.isNullOrBlank()) {
+                android.util.Log.w("MainActivity", "Missing or blank 'download_directory' in preferences")
+            }
+            startActivity(Intent(this, SettingsActivity::class.java))
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_main)
+
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        setSupportActionBar(toolbar)
+        toolbar.title = "RomM Platforms"
 
         val viewPager = findViewById<ViewPager2>(R.id.viewPager)
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
