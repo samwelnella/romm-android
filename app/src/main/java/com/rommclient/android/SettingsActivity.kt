@@ -46,7 +46,7 @@ class SettingsActivity : AppCompatActivity() {
         directoryInput.setText(downloadDir)
 
         val concurrentInput = findViewById<EditText>(R.id.concurrent_downloads_input)
-        concurrentInput.setText(prefs.getInt("max_concurrent_downloads", 4).toString())
+        concurrentInput.setText(prefs.getInt("max_concurrent_downloads", 3).toString())
         concurrentInput.hint = "Max 3"
         concurrentInput.filters = arrayOf(android.text.InputFilter { source, start, end, dest, dstart, dend ->
             val result = (dest.substring(0, dstart) + source + dest.substring(dend)).trim()
