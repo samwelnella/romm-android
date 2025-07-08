@@ -7,9 +7,8 @@
         android:allowBackup="true"
         android:label="RomM Platforms"
         android:supportsRtl="true"
-        android:theme="@style/Theme.RommClient">
+        android:theme="@style/AppTheme">
     <!-- LoginActivity removed as launcher -->
-    <activity android:name=".GameListActivity" android:exported="false" />
     <activity android:name=".SettingsActivity" />
     <activity android:name=".MainActivity" android:exported="true">
         <intent-filter>

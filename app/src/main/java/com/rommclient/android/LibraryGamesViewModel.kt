@@ -37,12 +37,15 @@ class LibraryGamesViewModel(application: Application) : AndroidViewModel(applica
                     android.util.Log.d("LibraryViewModel", "File in platform folder '$slug': ${it.name}")
                 }
 
+                val platformFileNames = platformDir?.listFiles()
+                    ?.mapNotNull { it.name?.trim()?.lowercase() }
+                    ?.toSet() ?: emptySet()
+
                 val visibleFiles = rawFiles.mapNotNull { fileName ->
-                    val match = platformDir?.listFiles()?.find {
-                        it.name?.trim()?.equals(fileName.trim(), ignoreCase = true) == true
-                    }
-                    android.util.Log.d("LibraryViewModel", "Checking: $fileName → Match: ${match?.name}")
-                    if (match?.exists() == true) fileName else null
+                    val normalized = fileName.trim().lowercase()
+                    val exists = normalized in platformFileNames
+                    android.util.Log.d("LibraryViewModel", "Checking: $fileName → Match: $exists")
+                    if (exists) fileName else null
                 }
 
                 visibleFiles

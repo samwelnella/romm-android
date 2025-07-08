@@ -103,6 +103,7 @@ class RommDatabaseHelper(context: Context) : SQLiteOpenHelper(context, "romm.db"
                 stmt.bindString(1, platformSlug)
                 stmt.bindString(2, fileName)
                 stmt.executeInsert()
+                android.util.Log.d("RommDB", "insertDownloadsBatch: $platformSlug, $fileName")
                 stmt.clearBindings()
             }
             db.setTransactionSuccessful()

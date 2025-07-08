@@ -64,14 +64,15 @@ class CollectionsFragment : Fragment() {
 
                     listView.setOnItemClickListener { _, _, position, _ ->
                         val selected = collectionObjects[position]
-                        val intent = Intent(requireContext(), GameListActivity::class.java)
-                        intent.putExtra("COLLECTION_ID", selected.getInt("id"))
-                        intent.putExtra("HOST", host)
-                        intent.putExtra("PORT", port)
-                        intent.putExtra("USER", user)
-                        intent.putExtra("PASS", pass)
-                        intent.putExtra("COLLECTION_NAME", selected.getString("name"))
-                        startActivity(intent)
+                        (requireActivity() as? MainActivity)?.showGameListFragment(
+                            host = host,
+                            port = port,
+                            user = user,
+                            pass = pass,
+                            platformId = null,
+                            collectionId = selected.getInt("id"),
+                            name = selected.getString("name")
+                        )
                     }
                 }
             } catch (e: Exception) {

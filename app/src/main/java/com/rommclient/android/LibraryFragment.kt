@@ -1,4 +1,3 @@
-
 package com.rommclient.android
 
 import androidx.fragment.app.viewModels
@@ -29,13 +28,13 @@ class LibraryFragment : Fragment() {
         viewModel.loadSlugs()
 
         listView.setOnItemClickListener { _, _, position, _ ->
-            val intent = Intent(context, LibraryGamesActivity::class.java)
             val selectedSlug = adapter.getItem(position)
             if (selectedSlug != null) {
-                intent.putExtra("platform_slug", selectedSlug)
-                startActivity(intent)
+                (requireActivity() as? MainActivity)?.showLibraryGamesFragment(selectedSlug)
             }
         }
+
+        // (activity as? MainActivity)?.setSnackbarView(root)
 
         return root
     }

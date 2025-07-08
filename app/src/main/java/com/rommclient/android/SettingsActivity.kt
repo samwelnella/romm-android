@@ -45,6 +45,26 @@ class SettingsActivity : AppCompatActivity() {
         val downloadDir = prefs.getString("download_directory", "Not set")
         directoryInput.setText(downloadDir)
 
+        val concurrentInput = findViewById<EditText>(R.id.concurrent_downloads_input)
+        concurrentInput.setText(prefs.getInt("max_concurrent_downloads", 4).toString())
+        concurrentInput.hint = "Max 3"
+        concurrentInput.filters = arrayOf(android.text.InputFilter { source, start, end, dest, dstart, dend ->
+            val result = (dest.substring(0, dstart) + source + dest.substring(dend)).trim()
+            val value = result.toIntOrNull()
+            if (value != null && value in 1..3) null else ""
+        })
+        // Add TextWatcher to show a warning if value is out of range
+        concurrentInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val value = s?.toString()?.toIntOrNull()
+                if (value != null && (value < 1 || value > 3)) {
+                    Toast.makeText(this@SettingsActivity, "Please enter a value between 1 and 3", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+
         directoryLayout.setEndIconOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -63,11 +83,15 @@ class SettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            val maxConcurrentStr = concurrentInput.text.toString().trim()
+            val maxConcurrent = maxConcurrentStr.toIntOrNull()?.coerceIn(1, 3) ?: 1
+
             prefs.edit().apply {
                 putString("host", host)
                 putString("port", port)
                 putString("username", user)
                 putString("password", pass)
+                putInt("max_concurrent_downloads", maxConcurrent)
                 apply()
             }
 

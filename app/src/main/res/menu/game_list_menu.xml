@@ -1,8 +1,18 @@
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
         android:id="@+id/menu_download_all"
-        android:title="Download All" />
+        android:title="Download All"
+        android:icon="@android:drawable/ic_menu_save"
+        app:showAsAction="never" />
     <item
         android:id="@+id/menu_download_all_skip_existing"
-        android:title="Download All (Skip Existing)" />
+        android:title="Download All (Skip Existing)"
+        android:icon="@android:drawable/ic_menu_upload"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_settings"
+        android:title="Settings"
+        android:icon="@android:drawable/ic_menu_preferences"
+        app:showAsAction="never" />
 </menu>

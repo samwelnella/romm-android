@@ -17,6 +17,10 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
 
+
+import com.rommclient.android.DownloadStatus.downloadStates
+//import com.rommclient.android.DownloadStatus.DownloadState
+
 // Singleton object for RommDatabaseHelper
 object RommDBSingleton {
     lateinit var helper: RommDatabaseHelper
@@ -50,11 +54,17 @@ class GameAdapter(
 
         fun updateDownloadStatus(platformSlug: String, fileName: String) {
             val alreadyDownloaded = RommDBSingleton.helper.isDownloaded(platformSlug, fileName)
-            android.util.Log.d("GameAdapter", "updateDownloadStatus($platformSlug, $fileName): isDownloaded=$alreadyDownloaded")
-            downloadButton.setImageResource(
-                if (alreadyDownloaded) android.R.drawable.checkbox_on_background
-                else android.R.drawable.stat_sys_download
-            )
+            val percent = itemProgress[fileName] ?: 0
+            val isCompleted = percent >= 100 || alreadyDownloaded
+            val state = downloadStates[fileName] ?: if (isCompleted) DownloadState.COMPLETED else DownloadState.NOT_STARTED
+
+            val iconRes = when {
+                isCompleted -> android.R.drawable.checkbox_on_background
+                state == DownloadState.QUEUED -> android.R.drawable.ic_menu_recent_history
+                else -> android.R.drawable.stat_sys_download
+            }
+
+            downloadButton.setImageResource(iconRes)
         }
     }
 
@@ -77,7 +87,7 @@ class GameAdapter(
         val emoji = when (normalizedRegion) {
             "USA", "US", "NA" -> "🇺🇸"
             "JPN", "JP", "JAPAN" -> "🇯🇵"
-            "EUR", "EU" -> "🇪🇺"
+            "EUR", "EU", "EUROPE" -> "🇪🇺"
             "KOR", "KR" -> "\uD83C\uDDF0\uD83C\uDDF7"
             "WORLD" -> "\uD83C\uDDFA\uD83C\uDDF3"
             else -> "\u2753"
@@ -91,16 +101,29 @@ class GameAdapter(
         val progressLiveData: LiveData<Int> = DownloadProgressTracker.getProgressLiveData(fileName)
         progressLiveData.observe(lifecycleOwner) { percent ->
             val alreadyDownloaded = RommDBSingleton.helper.isDownloaded(platformSlug, fileName)
-            if (alreadyDownloaded || percent >= 100) {
-                holder.downloadButton.visibility = View.VISIBLE
-                holder.progressIndicator.visibility = View.GONE
-                holder.downloadButton.setImageResource(android.R.drawable.checkbox_on_background)
-            } else {
-                holder.downloadButton.visibility = View.GONE
-                holder.progressIndicator.visibility = View.VISIBLE
-                holder.progressIndicator.setProgressCompat(percent, true)
-            }
+            val isCompleted = percent >= 100 || alreadyDownloaded
             itemProgress[fileName] = percent
+
+            when {
+                isCompleted -> {
+                    downloadStates[fileName] = DownloadState.COMPLETED
+                    holder.downloadButton.visibility = View.VISIBLE
+                    holder.progressIndicator.visibility = View.GONE
+                    holder.downloadButton.setImageResource(android.R.drawable.checkbox_on_background)
+                }
+                percent > 0 -> {
+                    downloadStates[fileName] = DownloadState.QUEUED
+                    holder.downloadButton.visibility = View.GONE
+                    holder.progressIndicator.visibility = View.VISIBLE
+                    holder.progressIndicator.setProgressCompat(percent, true)
+                }
+                else -> {
+                    downloadStates[fileName] = DownloadState.NOT_STARTED
+                    holder.downloadButton.visibility = View.VISIBLE
+                    holder.progressIndicator.visibility = View.GONE
+                    holder.downloadButton.setImageResource(android.R.drawable.stat_sys_download)
+                }
+            }
         }
         holder.downloadButton.setOnClickListener {
             listener.onDownloadClick(game)
@@ -108,16 +131,6 @@ class GameAdapter(
         }
         holder.updateDownloadStatus(platformSlug, fileName)
 
-        // Fallback: show button state if progress is not tracked yet
-        val progress = itemProgress[fileName]
-        if (progress == null || progress <= 0) {
-            holder.downloadButton.visibility = View.VISIBLE
-            holder.progressIndicator.visibility = View.GONE
-        } else {
-            holder.downloadButton.visibility = View.GONE
-            holder.progressIndicator.visibility = View.VISIBLE
-            holder.progressIndicator.setProgressCompat(progress, true)
-        }
         // Remove redundant text assignment for downloadButton
     }
 
@@ -153,4 +166,6 @@ class GameAdapter(
             notifyItemChanged(index)
         }
     }
+
+    fun getListener(): GameClickListener = listener
 }

@@ -1,5 +1,6 @@
 package com.rommclient.android
 
+import com.rommclient.android.MainActivity
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -25,6 +26,7 @@ class LibraryGamesActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@LibraryGamesActivity)
         }
         setContentView(recyclerView)
+        // Snackbar handling is now centralized in MainActivity.
 
         val slug = intent.getStringExtra("platform_slug") ?: return
         title = "Library: $slug"

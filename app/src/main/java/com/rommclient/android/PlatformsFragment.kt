@@ -71,15 +71,15 @@ class PlatformsFragment : Fragment() {
                     )
                     listView.setOnItemClickListener { _, _, position, _ ->
                         val (platformName, platformId) = items[position]
-                        val intent = Intent(context, GameListActivity::class.java).apply {
-                            putExtra("HOST", host)
-                            putExtra("PORT", port as String?)
-                            putExtra("USER", user as String?)
-                            putExtra("PASS", pass as String?)
-                            putExtra("PLATFORM_ID", platformId)
-                            putExtra("PLATFORM_NAME", platformName as String)
-                        }
-                        startActivity(intent)
+                        (requireActivity() as? MainActivity)?.showGameListFragment(
+                            host = host,
+                            port = port,
+                            user = user,
+                            pass = pass,
+                            platformId = platformId,
+                            collectionId = null,
+                            name = platformName
+                        )
                     }
                 }
 
