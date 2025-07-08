@@ -88,8 +88,13 @@ class GameAdapter(
             "USA", "US", "NA" -> "🇺🇸"
             "JPN", "JP", "JAPAN" -> "🇯🇵"
             "EUR", "EU", "EUROPE" -> "🇪🇺"
-            "KOR", "KR" -> "\uD83C\uDDF0\uD83C\uDDF7"
-            "WORLD" -> "\uD83C\uDDFA\uD83C\uDDF3"
+            "KOR", "KR", "KOREA" -> "🇰🇷"
+            "GER", "GERMANY" -> "🇩🇪"
+            "NLD", "NED", "NETHERLANDS" -> "🇳🇱"
+            "FRA", "FRANCE" -> "🇫🇷"
+            "AUS", "AUSTRALIA" -> "🇦🇺"
+            "SPA", "SPAIN" -> "🇪🇸"
+            "WORLD" -> "🇺🇳"
             else -> "\u2753"
         }
 

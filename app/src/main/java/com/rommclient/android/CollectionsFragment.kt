@@ -43,7 +43,7 @@ class CollectionsFragment : Fragment() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = "http://$host:$port/api/collections"
+                val url = "$host:$port/api/collections"
                 val credential = Credentials.basic(user, pass)
                 val request = Request.Builder().url(url).header("Authorization", credential).build()
                 val response = client.newCall(request).execute()

@@ -72,7 +72,12 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         saveButton.setOnClickListener {
-            val host = hostInput.text.toString().trim()
+            val rawHost = hostInput.text.toString().trim()
+            val host = if (rawHost.startsWith("http://") || rawHost.startsWith("https://")) {
+                rawHost
+            } else {
+                "http://$rawHost"
+            }
             val port = portInput.text.toString().trim()
             val user = userInput.text.toString().trim()
             val pass = passInput.text.toString().trim()

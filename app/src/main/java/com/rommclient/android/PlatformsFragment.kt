@@ -46,9 +46,9 @@ class PlatformsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
-                Log.d("PlatformsFragment", "Fetching platforms from http://$host:$port/api/platforms")
+                Log.d("PlatformsFragment", "Fetching platforms from $host:$port/api/platforms")
                 val request = Request.Builder()
-                    .url("http://$host:$port/api/platforms")
+                    .url("$host:$port/api/platforms")
                     .addHeader("Authorization", Credentials.basic(user, pass))
                     .build()
 

@@ -159,8 +159,8 @@ class GameListFragment : Fragment() {
 
                 while (true) {
                     val url = when {
-                        collectionId != null -> "http://$host:$port/api/roms?collection_id=$collectionId&limit=$limit&offset=$offset&expand=collection"
-                        platformId != null -> "http://$host:$port/api/roms?platform_id=$platformId&limit=$limit&offset=$offset&expand=platform"
+                        collectionId != null -> "$host:$port/api/roms?collection_id=$collectionId&limit=$limit&offset=$offset&expand=collection"
+                        platformId != null -> "$host:$port/api/roms?platform_id=$platformId&limit=$limit&offset=$offset&expand=platform"
                         else -> {
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(requireContext(), "Invalid platform or collection ID", Toast.LENGTH_LONG).show()
@@ -244,7 +244,7 @@ class GameListFragment : Fragment() {
         val romId = game.optInt("id")
         val fsName = file.optString("fs_name").ifBlank { file.optString("file_name") }
         val quotedFsName = Uri.encode(fsName)
-        val downloadUrl = "http://$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
+        val downloadUrl = "$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
 
         if (downloadDir.startsWith("content://")) {
             val dirUri = Uri.parse(downloadDir)
@@ -287,7 +287,7 @@ class GameListFragment : Fragment() {
                 val romId = game.optInt("id")
                 val fsName = file.optString("fs_name").ifBlank { file.optString("file_name") }
                 val quotedFsName = Uri.encode(fsName)
-                val downloadUrl = "http://$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
+                val downloadUrl = "$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
 
                 if (downloadDir.startsWith("content://")) {
                     val dirUri = Uri.parse(downloadDir)
