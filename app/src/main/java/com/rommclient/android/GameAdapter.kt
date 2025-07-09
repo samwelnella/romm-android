@@ -3,7 +3,6 @@ package com.rommclient.android
 import com.google.android.material.progressindicator.CircularProgressIndicator
 
 import androidx.lifecycle.LiveData
-import com.rommclient.android.DownloadProgressTracker
 
 import android.content.Context
 import android.view.LayoutInflater
@@ -102,34 +101,6 @@ class GameAdapter(
         val fileName = files?.optJSONObject(0)?.optString("file_name") ?: ""
         val platformSlug = game.optString("platform_fs_slug")
         holder.nameView.text = "$name $emoji"
-        // Observe download progress for this row
-        val progressLiveData: LiveData<Int> = DownloadProgressTracker.getProgressLiveData(fileName)
-        progressLiveData.observe(lifecycleOwner) { percent ->
-            val alreadyDownloaded = RommDBSingleton.helper.isDownloaded(platformSlug, fileName)
-            val isCompleted = percent >= 100 || alreadyDownloaded
-            itemProgress[fileName] = percent
-
-            when {
-                isCompleted -> {
-                    downloadStates[fileName] = DownloadState.COMPLETED
-                    holder.downloadButton.visibility = View.VISIBLE
-                    holder.progressIndicator.visibility = View.GONE
-                    holder.downloadButton.setImageResource(android.R.drawable.checkbox_on_background)
-                }
-                percent > 0 -> {
-                    downloadStates[fileName] = DownloadState.QUEUED
-                    holder.downloadButton.visibility = View.GONE
-                    holder.progressIndicator.visibility = View.VISIBLE
-                    holder.progressIndicator.setProgressCompat(percent, true)
-                }
-                else -> {
-                    downloadStates[fileName] = DownloadState.NOT_STARTED
-                    holder.downloadButton.visibility = View.VISIBLE
-                    holder.progressIndicator.visibility = View.GONE
-                    holder.downloadButton.setImageResource(android.R.drawable.stat_sys_download)
-                }
-            }
-        }
         holder.downloadButton.setOnClickListener {
             listener.onDownloadClick(game)
             holder.updateDownloadStatus(platformSlug, fileName)

@@ -76,7 +76,7 @@
             android:id="@+id/concurrent_downloads_container"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:hint="Max Concurrent Downloads"
+            android:hint="Max Concurrent Downloads (restart app for change to take effect)"
             app:layout_constraintTop_toBottomOf="@id/download_path_container"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"

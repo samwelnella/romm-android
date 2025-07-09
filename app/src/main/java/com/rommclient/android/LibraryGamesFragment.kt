@@ -75,25 +75,6 @@ class LibraryGamesFragment : Fragment() {
 
         // Snackbar
         val rootView = requireActivity().findViewById<View>(android.R.id.content)
-        lifecycleScope.launch {
-            DownloadManager.snackbarFlow.collect { message ->
-                if (message.isNotBlank()) {
-                    if (snackbar == null) {
-                        snackbar = Snackbar.make(rootView, message, Snackbar.LENGTH_INDEFINITE)
-                        snackbar?.view?.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
-                            maxLines = 5
-                            isSingleLine = false
-                        }
-                        snackbar?.show()
-                    } else {
-                        snackbar?.setText(message)
-                    }
-                } else {
-                    snackbar?.dismiss()
-                    snackbar = null
-                }
-            }
-        }
     }
 
     private fun confirmDelete(

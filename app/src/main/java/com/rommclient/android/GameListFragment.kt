@@ -19,12 +19,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-import com.rommclient.android.DownloadManager.DownloadItem
 
 import com.rommclient.android.PlatformMappings.esDeFolderMap
-import com.rommclient.android.DownloadStatus.DownloadQueueManager
 
 import androidx.appcompat.app.AppCompatActivity
+import android.content.Intent
+import androidx.core.content.ContextCompat
 
 
 
@@ -92,7 +92,6 @@ class GameListFragment : Fragment() {
         }
 
         val maxConcurrent = prefs.getInt("max_concurrent_downloads", 5)
-        DownloadQueueManager.start(CoroutineScope(Dispatchers.IO), maxConcurrent)
 
         host = requireArguments().getString("HOST", "")
         port = requireArguments().getString("PORT", "")
@@ -103,26 +102,6 @@ class GameListFragment : Fragment() {
         platformName = requireArguments().getString("NAME", "RomM Platforms")
 
         (requireActivity() as AppCompatActivity).supportActionBar?.title = platformName
-
-        lifecycleScope.launch {
-            DownloadManager.snackbarFlow.collect { message ->
-                if (message.isNotBlank()) {
-                    if (snackbar == null) {
-                        snackbar = Snackbar.make(view, message, Snackbar.LENGTH_INDEFINITE)
-                        snackbar?.view?.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
-                            maxLines = 5
-                            isSingleLine = false
-                        }
-                        snackbar?.show()
-                    } else {
-                        snackbar?.setText(message)
-                    }
-                } else {
-                    snackbar?.dismiss()
-                    snackbar = null
-                }
-            }
-        }
 
         loadGames()
     }
@@ -246,22 +225,13 @@ class GameListFragment : Fragment() {
         val quotedFsName = Uri.encode(fsName)
         val downloadUrl = "$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
 
-        if (downloadDir.startsWith("content://")) {
-            val dirUri = Uri.parse(downloadDir)
-            val docFile = DocumentFile.fromTreeUri(requireContext(), dirUri)
-            val platformDir = docFile?.findFile(esDeFolder) ?: docFile?.createDirectory(esDeFolder)
-            val outFile = platformDir?.findFile(fileName) ?: platformDir?.createFile("*/*", fileName)
-            outFile?.let {
-                DownloadManager.enqueue(
-                    DownloadItem(fileName, platformSlug, downloadUrl, outputUri = it.uri, outputFile = null)
-                )
-            }
-        } else {
-            val outputPath = "$downloadDir/$esDeFolder/$fileName"
-            DownloadManager.enqueue(
-                DownloadItem(fileName, platformSlug, downloadUrl, outputUri = null, outputFile = File(outputPath))
-            )
+        // Always start DownloadService directly
+        val intent = Intent(requireContext(), DownloadService::class.java).apply {
+            putExtra("file_url", downloadUrl)
+            putExtra("file_name", fileName)
+            putExtra("platform_slug", platformSlug)
         }
+        ContextCompat.startForegroundService(requireContext(), intent)
     }
 
 
@@ -271,7 +241,6 @@ class GameListFragment : Fragment() {
         val games = adapter.games.toList()
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val downloadItems = mutableListOf<DownloadItem>()
             for (game in games) {
                 val files = game.optJSONArray("files") ?: continue
                 val file = files.optJSONObject(0) ?: continue
@@ -289,28 +258,13 @@ class GameListFragment : Fragment() {
                 val quotedFsName = Uri.encode(fsName)
                 val downloadUrl = "$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
 
-                if (downloadDir.startsWith("content://")) {
-                    val dirUri = Uri.parse(downloadDir)
-                    val docFile = DocumentFile.fromTreeUri(requireContext(), dirUri)
-                    val platformDir = docFile?.findFile(esDeFolder) ?: docFile?.createDirectory(esDeFolder)
-                    platformDir?.let {
-                        downloadItems.add(
-                            DownloadItem(
-                                fileName, platformSlug, downloadUrl,
-                                outputUri = null, outputFile = null,
-                                platformDirUri = it.uri, useDocumentFile = true
-                            )
-                        )
-                    }
-                } else {
-                    val outputPath = "$downloadDir/$esDeFolder/$fileName"
-                    downloadItems.add(
-                        DownloadItem(fileName, platformSlug, downloadUrl, outputUri = null, outputFile = File(outputPath))
-                    )
+                val intent = Intent(requireContext(), DownloadService::class.java).apply {
+                    putExtra("file_url", downloadUrl)
+                    putExtra("file_name", fileName)
+                    putExtra("platform_slug", platformSlug)
                 }
+                ContextCompat.startForegroundService(requireContext(), intent)
             }
-
-            DownloadManager.enqueueAll(downloadItems)
         }
     }
 }

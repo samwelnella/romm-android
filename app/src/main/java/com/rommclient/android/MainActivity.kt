@@ -1,10 +1,13 @@
 package com.rommclient.android
 
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
+
 import android.view.View
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import com.rommclient.android.SnackbarController
 
 import android.content.Intent
 import android.os.Bundle
@@ -17,7 +20,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
-import com.rommclient.android.DownloadManager
 
 class MainActivity : AppCompatActivity() {
     private lateinit var coordinatorRoot: View
@@ -26,10 +28,15 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
+        }
+
         // Ensure we always use "romm_prefs" as preferences file name
         val prefs = getSharedPreferences("romm_prefs", MODE_PRIVATE)
         val maxDownloads = prefs.getInt("max_concurrent_downloads", 3)
-        DownloadManager.setMaxConcurrent(maxDownloads)
         val host = prefs.getString("host", null)
         android.util.Log.d("MainActivity", "Loaded host: $host")
         val downloadDir = prefs.getString("download_directory", null)
@@ -65,29 +72,6 @@ class MainActivity : AppCompatActivity() {
         }
         coordinatorRoot = findViewById(R.id.coordinatorRoot)
 
-        lifecycleScope.launchWhenStarted {
-            DownloadManager.snackbarFlow.collect { message ->
-                if (message.isNotBlank()) {
-                    if (snackbar == null) {
-                        snackbar = com.google.android.material.snackbar.Snackbar.make(
-                            coordinatorRoot, message, com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE
-                        )
-                        snackbar?.view?.findViewById<android.widget.TextView>(
-                            com.google.android.material.R.id.snackbar_text
-                        )?.apply {
-                            maxLines = 5
-                            isSingleLine = false
-                        }
-                        snackbar?.show()
-                    } else {
-                        snackbar?.setText(message)
-                    }
-                } else {
-                    snackbar?.dismiss()
-                    snackbar = null
-                }
-            }
-        }
         toolbar.title = "RomM Platforms"
         // Removed toolbar.inflateMenu(R.menu.test_menu) and toolbar.setOnMenuItemClickListener block
 

@@ -2,7 +2,13 @@
     package="com.rommclient.android">
     <uses-permission android:name="android.permission.INTERNET"/>
 
-<application android:networkSecurityConfig="@xml/network_security_config"
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application android:networkSecurityConfig="@xml/network_security_config"
         android:name=".RommApp"
         android:allowBackup="true"
         android:label="RomM Platforms"
@@ -17,5 +23,11 @@
         </intent-filter>
     </activity>
     <activity android:name=".LibraryGamesActivity" />
-</application>
+
+        <service
+            android:name=".DownloadService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+    </application>
 </manifest>
