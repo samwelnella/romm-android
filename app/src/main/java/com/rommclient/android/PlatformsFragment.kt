@@ -39,18 +39,21 @@ class PlatformsFragment : Fragment() {
         val user = prefs.getString("username", "") ?: ""
         val pass = prefs.getString("password", "") ?: ""
 
-        if (host.isNullOrBlank() || port.isNullOrBlank() || user.isNullOrBlank() || pass.isNullOrBlank()) {
-            Toast.makeText(context, "Missing connection info", Toast.LENGTH_LONG).show()
+        if (host.isBlank()) {
+            Toast.makeText(context, "Missing host info", Toast.LENGTH_LONG).show()
             return root
         }
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
                 Log.d("PlatformsFragment", "Fetching platforms from $host:$port/api/platforms")
-                val request = Request.Builder()
-                    .url("$host:$port/api/platforms")
-                    .addHeader("Authorization", Credentials.basic(user, pass))
-                    .build()
+                val portPart = if (port.isNotBlank()) ":$port" else ""
+                val baseUrl = "$host$portPart/api/platforms"
+                val builder = Request.Builder().url(baseUrl)
+                if (user.isNotBlank() && pass.isNotBlank()) {
+                    builder.addHeader("Authorization", Credentials.basic(user, pass))
+                }
+                val request = builder.build()
 
                 val response = client.newCall(request).execute()
                 val body = response.body?.string()

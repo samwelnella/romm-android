@@ -137,22 +137,54 @@ class GameListFragment : Fragment() {
                 var totalCount = -1
 
                 while (true) {
-                    val url = when {
-                        collectionId != null -> "$host:$port/api/roms?collection_id=$collectionId&limit=$limit&offset=$offset&expand=collection"
-                        platformId != null -> "$host:$port/api/roms?platform_id=$platformId&limit=$limit&offset=$offset&expand=platform"
-                        else -> {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(requireContext(), "Invalid platform or collection ID", Toast.LENGTH_LONG).show()
-                            }
-                            return@launch
+                    var url: String? = null
+                    try {
+                        // --- Begin new URL builder block ---
+                        Log.d("URL_DEBUG", "host=$host, port=$port, user=$user, pass=$pass")
+
+                        val hostInput = host.trim()
+                        val uri = Uri.parse(if (hostInput.startsWith("http")) hostInput else "http://$hostInput")
+
+                        val scheme = uri.scheme ?: "http"
+                        val hostOnly = uri.host ?: throw IllegalArgumentException("Invalid host")
+                        val portNumber = port?.trim()?.toIntOrNull()
+
+                        val baseUrlBuilder = HttpUrl.Builder()
+                            .scheme(scheme)
+                            .host(hostOnly)
+
+                        if (portNumber != null) {
+                            baseUrlBuilder.port(portNumber)
                         }
+
+                        val httpUrl = baseUrlBuilder
+                            .addPathSegment("api")
+                            .addPathSegment("roms")
+                            .addQueryParameter("platform_id", platformId.toString())
+                            .addQueryParameter("limit", "100")
+                            .addQueryParameter("offset", "0")
+                            .addQueryParameter("expand", "platform")
+                            .build()
+                        url = httpUrl.toString()
+                        Log.d("URL_DEBUG", "Built URL: $url")
+                        // --- End new URL builder block ---
+                    } catch (e: Exception) {
+                        Log.e("URL_DEBUG", "Failed to build URL", e)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(requireContext(), "Failed to build URL: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
                     }
 
-                    val credential = Credentials.basic(user, pass)
-                    val request = Request.Builder().url(url)
-                        .addHeader("Authorization", credential)
+                    val requestBuilder = Request.Builder().url(url!!)
                         .addHeader("Accept", "application/json")
-                        .build()
+
+                    if (user.isNotBlank() && pass.isNotBlank()) {
+                        val credential = Credentials.basic(user, pass)
+                        requestBuilder.addHeader("Authorization", credential)
+                    }
+
+                    val request = requestBuilder.build()
 
                     val response = client.newCall(request).execute()
                     if (!response.isSuccessful) {
@@ -223,7 +255,36 @@ class GameListFragment : Fragment() {
         val romId = game.optInt("id")
         val fsName = file.optString("fs_name").ifBlank { file.optString("file_name") }
         val quotedFsName = Uri.encode(fsName)
-        val downloadUrl = "$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
+        var downloadUrl: String? = null
+        try {
+            Log.d("URL_DEBUG", "host=$host, port=$port, user=$user, pass=$pass")
+            val hostInput = host.trim()
+            val uri = Uri.parse(if (hostInput.startsWith("http")) hostInput else "http://$hostInput")
+
+            val scheme = uri.scheme ?: "http"
+            val hostOnly = uri.host ?: throw IllegalArgumentException("Invalid host")
+            val portNumber = port?.trim()?.toIntOrNull()
+
+            val builder = okhttp3.HttpUrl.Builder()
+                .scheme(scheme)
+                .host(hostOnly)
+            if (portNumber != null) {
+                builder.port(portNumber)
+            }
+            builder.addPathSegment("api")
+            builder.addPathSegment("roms")
+            builder.addPathSegment(romId.toString())
+            builder.addPathSegment("content")
+            builder.addPathSegment(quotedFsName)
+            builder.addQueryParameter("hidden_folder", "true")
+            val httpUrl = builder.build()
+            downloadUrl = httpUrl.toString()
+            Log.d("URL_DEBUG", "Built URL: $downloadUrl")
+        } catch (e: Exception) {
+            Log.e("URL_DEBUG", "Failed to build download URL", e)
+            Toast.makeText(requireContext(), "Failed to build download URL: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
 
         // Always start DownloadService directly
         val intent = Intent(requireContext(), DownloadService::class.java).apply {
@@ -256,7 +317,35 @@ class GameListFragment : Fragment() {
                 val romId = game.optInt("id")
                 val fsName = file.optString("fs_name").ifBlank { file.optString("file_name") }
                 val quotedFsName = Uri.encode(fsName)
-                val downloadUrl = "$host:$port/api/roms/$romId/content/$quotedFsName?hidden_folder=true"
+                var downloadUrl: String? = null
+                try {
+                    Log.d("URL_DEBUG", "host=$host, port=$port, user=$user, pass=$pass")
+                    val hostInput = host.trim()
+                    val uri = Uri.parse(if (hostInput.startsWith("http")) hostInput else "http://$hostInput")
+
+                    val scheme = uri.scheme ?: "http"
+                    val hostOnly = uri.host ?: throw IllegalArgumentException("Invalid host")
+                    val portNumber = port?.trim()?.toIntOrNull()
+
+                    val builder = okhttp3.HttpUrl.Builder()
+                        .scheme(scheme)
+                        .host(hostOnly)
+                    if (portNumber != null) {
+                        builder.port(portNumber)
+                    }
+                    builder.addPathSegment("api")
+                    builder.addPathSegment("roms")
+                    builder.addPathSegment(romId.toString())
+                    builder.addPathSegment("content")
+                    builder.addPathSegment(quotedFsName)
+                    builder.addQueryParameter("hidden_folder", "true")
+                    val httpUrl = builder.build()
+                    downloadUrl = httpUrl.toString()
+                    Log.d("URL_DEBUG", "Built URL: $downloadUrl")
+                } catch (e: Exception) {
+                    Log.e("URL_DEBUG", "Failed to build download URL", e)
+                    continue
+                }
 
                 val intent = Intent(requireContext(), DownloadService::class.java).apply {
                     putExtra("file_url", downloadUrl)

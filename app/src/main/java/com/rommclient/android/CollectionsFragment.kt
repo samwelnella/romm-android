@@ -1,8 +1,6 @@
 package com.rommclient.android
 
-import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -35,17 +33,21 @@ class CollectionsFragment : Fragment() {
         val user = prefs.getString("username", "") ?: ""
         val pass = prefs.getString("password", "") ?: ""
 
-        if (host.isBlank() || port.isBlank() || user.isBlank() || pass.isBlank()) {
-            Toast.makeText(requireContext(), "Missing host/port/user/pass", Toast.LENGTH_LONG).show()
+        if (host.isBlank()) {
+            Toast.makeText(requireContext(), "Missing host", Toast.LENGTH_LONG).show()
             return view
         }
-        // removed duplicate client
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = "$host:$port/api/collections"
-                val credential = Credentials.basic(user, pass)
-                val request = Request.Builder().url(url).header("Authorization", credential).build()
+                val portPart = if (port.isNotBlank()) ":$port" else ""
+                val baseUrl = "$host$portPart/api/collections"
+                val builder = Request.Builder().url(baseUrl)
+                if (user.isNotBlank() && pass.isNotBlank()) {
+                    val credential = Credentials.basic(user, pass)
+                    builder.header("Authorization", credential)
+                }
+                val request = builder.build()
                 val response = client.newCall(request).execute()
                 val json = response.body?.string() ?: "[]"
                 val array = JSONArray(json)

@@ -1,5 +1,8 @@
 package com.rommclient.android
 
+import com.rommclient.android.PlatformMappings
+import com.rommclient.android.RommDatabaseHelper
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -19,10 +22,14 @@ import java.io.File
 import java.net.URL
 
 class DownloadService : Service() {
+    val lastUpdateTimes = mutableMapOf<Int, Long>()
+    // Moved from top of file; used for notification throttling
+    private var lastGroupUpdateTime = 0L
     companion object {
         const val CHANNEL_ID = "download_channel"
         const val GROUP_KEY_DOWNLOADS = "romm_downloads"
         const val SUMMARY_NOTIFICATION_ID = 1000
+        private const val NOTIFICATION_ID_PREPARE = 999
         @JvmStatic var activeDownloads = 0
         @JvmStatic var totalDownloads = 0
         private var isForegroundStarted = false
@@ -35,6 +42,14 @@ class DownloadService : Service() {
     private lateinit var semaphore: Semaphore
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Show initial placeholder notification IMMEDIATELY
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Preparing downloads...")
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOnlyAlertOnce(true)
+            .build()
+        startForeground(NOTIFICATION_ID_PREPARE, notification)
+
         val fileUrl = intent?.getStringExtra("file_url") ?: return START_NOT_STICKY
         val fileName = intent.getStringExtra("file_name") ?: "downloaded_file"
         val platformSlug = intent.getStringExtra("platform_slug") ?: "unknown"
@@ -257,7 +272,7 @@ class DownloadService : Service() {
                 } finally {
                     stopSelf()
                     activeDownloads--
-                    showGroupSummaryNotification(this@DownloadService, totalDownloads - activeDownloads, totalDownloads)
+                    showGroupSummaryNotification(this@DownloadService, totalDownloads - activeDownloads + 1, totalDownloads)
                     if (activeDownloads == 0) {
                         cancelSummaryNotification(this@DownloadService)
                         totalDownloads = 0
@@ -298,9 +313,16 @@ private fun showPerDownloadNotification(
     notificationId: Int,
     statusText: String
 ) {
-    // Ensure group summary is posted before individual notification
-    showGroupSummaryNotification(context, DownloadService.totalDownloads - DownloadService.activeDownloads, DownloadService.totalDownloads)
-
+    // Throttle notification updates to at most once per second per notificationId
+    val service = context as? DownloadService
+    if (service != null) {
+        val now = System.currentTimeMillis()
+        val lastUpdate = service.lastUpdateTimes[notificationId] ?: 0
+        if (now - lastUpdate < 1000) return // Skip if called too quickly
+        service.lastUpdateTimes[notificationId] = now
+    }
+    // Ensure group summary is posted before individual notification, but throttle updates
+    maybeUpdateGroupSummaryNotification(context)
 
     val builder = NotificationCompat.Builder(context, DownloadService.CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -315,6 +337,19 @@ private fun showPerDownloadNotification(
     val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.notify(notificationId, builder.build())
+}
+
+private var lastGroupUpdateTime = 0L
+private fun maybeUpdateGroupSummaryNotification(context: Context) {
+    val currentTime = System.currentTimeMillis()
+    if (currentTime - lastGroupUpdateTime >= 5000) {
+        showGroupSummaryNotification(
+            context,
+            DownloadService.totalDownloads - DownloadService.activeDownloads + 1,
+            DownloadService.totalDownloads
+        )
+        lastGroupUpdateTime = currentTime
+    }
 }
 
 private fun showGroupSummaryNotification(context: Context, active: Int, total: Int) {

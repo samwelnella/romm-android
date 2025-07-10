@@ -83,8 +83,8 @@ class SettingsActivity : AppCompatActivity() {
             val pass = passInput.text.toString().trim()
             val downloadDir = prefs.getString("download_directory", null)
 
-            if (host.isBlank() || port.isBlank() || user.isBlank() || pass.isBlank() || downloadDir.isNullOrBlank()) {
-                Toast.makeText(this, "All fields and a download directory are required.", Toast.LENGTH_SHORT).show()
+            if (host.isBlank() || downloadDir.isNullOrBlank()) {
+                Toast.makeText(this, "Host and download directory are required.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -93,9 +93,9 @@ class SettingsActivity : AppCompatActivity() {
 
             prefs.edit().apply {
                 putString("host", host)
-                putString("port", port)
-                putString("username", user)
-                putString("password", pass)
+                if (port.isNotBlank()) putString("port", port) else remove("port")
+                if (user.isNotBlank()) putString("username", user) else remove("username")
+                if (pass.isNotBlank()) putString("password", pass) else remove("password")
                 putInt("max_concurrent_downloads", maxConcurrent)
                 apply()
             }
