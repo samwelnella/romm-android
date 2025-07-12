@@ -162,7 +162,7 @@ class GameListFragment : Fragment() {
                             .addPathSegment("roms")
                             .addQueryParameter("platform_id", platformId.toString())
                             .addQueryParameter("limit", "100")
-                            .addQueryParameter("offset", "0")
+                            .addQueryParameter("offset", offset.toString())
                             .addQueryParameter("expand", "platform")
                             .build()
                         url = httpUrl.toString()
