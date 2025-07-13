@@ -152,19 +152,26 @@ class GameListFragment : Fragment() {
                         val baseUrlBuilder = HttpUrl.Builder()
                             .scheme(scheme)
                             .host(hostOnly)
-
                         if (portNumber != null) {
                             baseUrlBuilder.port(portNumber)
                         }
 
-                        val httpUrl = baseUrlBuilder
+                        val urlBuilder = baseUrlBuilder
                             .addPathSegment("api")
                             .addPathSegment("roms")
-                            .addQueryParameter("platform_id", platformId.toString())
-                            .addQueryParameter("limit", "100")
+                            .addQueryParameter("limit", limit.toString())
                             .addQueryParameter("offset", offset.toString())
                             .addQueryParameter("expand", "platform")
-                            .build()
+
+                        platformId?.let {
+                            urlBuilder.addQueryParameter("platform_id", it.toString())
+                        }
+
+                        collectionId?.let {
+                            urlBuilder.addQueryParameter("collection_id", it.toString())
+                        }
+
+                        val httpUrl = urlBuilder.build()
                         url = httpUrl.toString()
                         Log.d("URL_DEBUG", "Built URL: $url")
                         // --- End new URL builder block ---
