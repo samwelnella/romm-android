@@ -116,9 +116,10 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         pass: String,
         platformId: Int?,
         collectionId: Int?,
-        name: String
+        name: String,
+        firmwareJson: String? = null
     ) {
-        val fragment = GameListFragment.newInstance(host, port, user, pass, platformId, collectionId, name)
+        val fragment = GameListFragment.newInstance(host, port, user, pass, platformId, collectionId, name, firmwareJson)
         findViewById<ViewPager2>(R.id.viewPager).visibility = View.GONE
         findViewById<TabLayout>(R.id.tabLayout).visibility = View.GONE
         findViewById<View>(R.id.fragment_container).visibility = View.VISIBLE

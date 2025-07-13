@@ -30,6 +30,9 @@ import androidx.core.content.ContextCompat
 
 class GameListFragment : Fragment() {
 
+    private var firmware: JSONArray? = null
+    private val MENU_DOWNLOAD_FIRMWARE_ID = 101
+
     private val client = OkHttpClient()
     private var snackbar: Snackbar? = null
 
@@ -53,7 +56,8 @@ class GameListFragment : Fragment() {
             pass: String,
             platformId: Int?,
             collectionId: Int?,
-            name: String
+            name: String,
+            firmwareJson: String? = null
         ): GameListFragment {
             return GameListFragment().apply {
                 arguments = Bundle().apply {
@@ -64,6 +68,7 @@ class GameListFragment : Fragment() {
                     putInt("PLATFORM_ID", platformId ?: -1)
                     putInt("COLLECTION_ID", collectionId ?: -1)
                     putString("NAME", name)
+                    putString("FIRMWARE_JSON", firmwareJson)
                 }
             }
         }
@@ -103,12 +108,23 @@ class GameListFragment : Fragment() {
 
         (requireActivity() as AppCompatActivity).supportActionBar?.title = platformName
 
+        arguments?.getString("FIRMWARE_JSON")?.let {
+            try {
+                firmware = JSONArray(it)
+            } catch (e: Exception) {
+                Log.e("GameListFragment", "Failed to parse firmware JSON", e)
+            }
+        }
+
         loadGames()
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         menu.clear()
         inflater.inflate(R.menu.game_list_menu, menu)
+        if (firmware != null && firmware!!.length() > 0) {
+            menu.add(0, MENU_DOWNLOAD_FIRMWARE_ID, 0, "Download Firmware")
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -119,6 +135,10 @@ class GameListFragment : Fragment() {
             }
             R.id.menu_download_all_skip_existing -> {
                 enqueueAllDownloads(skipExisting = true)
+                true
+            }
+            MENU_DOWNLOAD_FIRMWARE_ID -> {
+                firmware?.let { downloadFirmwareFiles(it) }
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -361,6 +381,47 @@ class GameListFragment : Fragment() {
                 }
                 ContextCompat.startForegroundService(requireContext(), intent)
             }
+        }
+    }
+    private fun downloadFirmwareFiles(firmwareArray: JSONArray) {
+        for (i in 0 until firmwareArray.length()) {
+            val item = firmwareArray.optJSONObject(i) ?: continue
+            val fileName = item.optString("file_name")
+            val firmwareId = item.optInt("id")
+
+            if (fileName.isNullOrBlank() || firmwareId <= 0) continue
+
+            val hostInput = host.trim()
+            val uri = Uri.parse(if (hostInput.startsWith("http")) hostInput else "http://$hostInput")
+
+            val scheme = uri.scheme ?: "http"
+            val hostOnly = uri.host ?: continue
+            val portNumber = port.trim().toIntOrNull()
+
+            val builder = okhttp3.HttpUrl.Builder()
+                .scheme(scheme)
+                .host(hostOnly)
+            if (portNumber != null) {
+                builder.port(portNumber)
+            }
+
+            builder.addPathSegment("api")
+            builder.addPathSegment("firmware")
+            builder.addPathSegment(firmwareId.toString())
+            builder.addPathSegment("content")
+            builder.addPathSegment(fileName)
+            builder.addQueryParameter("hidden_folder", "true")
+
+            val downloadUrl = builder.build().toString()
+            Log.d("FirmwareDownload", "Built firmware URL: $downloadUrl")
+
+            val intent = Intent(requireContext(), DownloadService::class.java).apply {
+                putExtra("file_url", downloadUrl)
+                putExtra("file_name", fileName)
+                putExtra("platform_slug", "bios")
+            }
+
+            ContextCompat.startForegroundService(requireContext(), intent)
         }
     }
 }

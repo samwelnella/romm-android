@@ -59,10 +59,11 @@ class PlatformsFragment : Fragment() {
                 val body = response.body?.string()
                 val platforms = JSONArray(body)
 
-                val items = mutableListOf<Pair<String, Int>>()
+                val items = mutableListOf<Triple<String, Int, JSONArray?>>()
                 for (i in 0 until platforms.length()) {
                     val platform = platforms.getJSONObject(i)
-                    items.add(Pair(platform.getString("display_name"), platform.getInt("id")))
+                    val firmwareArray = platform.optJSONArray("firmware")
+                    items.add(Triple(platform.getString("display_name"), platform.getInt("id"), firmwareArray))
                 }
 
                 withContext(Dispatchers.Main) {
@@ -73,7 +74,7 @@ class PlatformsFragment : Fragment() {
                         names
                     )
                     listView.setOnItemClickListener { _, _, position, _ ->
-                        val (platformName, platformId) = items[position]
+                        val (platformName, platformId, firmwareArray) = items[position]
                         (requireActivity() as? MainActivity)?.showGameListFragment(
                             host = host,
                             port = port,
@@ -81,7 +82,8 @@ class PlatformsFragment : Fragment() {
                             pass = pass,
                             platformId = platformId,
                             collectionId = null,
-                            name = platformName
+                            name = platformName,
+                            firmwareJson = firmwareArray?.toString()
                         )
                     }
                 }
