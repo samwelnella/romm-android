@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LibraryGamesFragment : Fragment() {
     private var snackbar: Snackbar? = null
@@ -88,23 +89,35 @@ class LibraryGamesFragment : Fragment() {
             .setTitle("Delete Game")
             .setMessage("Are you sure you want to delete \"$fileName\"?")
             .setPositiveButton("Delete") { _, _ ->
-                try {
-                    val platformDir = baseDir?.findFile(slug)
-                    val gameFile = platformDir?.findFile(fileName)
-
-                    if (gameFile != null && gameFile.exists()) {
-                        if (!gameFile.delete()) {
-                            Toast.makeText(requireContext(), "Could not delete file", Toast.LENGTH_SHORT).show()
+                // Use coroutine for SAF-based deletion
+                lifecycleScope.launch {
+                    var deleteSuccess = true
+                    try {
+                        val platformDir = baseDir?.findFile(slug)
+                        val gameFile = platformDir?.findFile(fileName)
+                        if (gameFile != null && gameFile.exists()) {
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                fun deleteSafFile(doc: DocumentFile) {
+                                    if (doc.isDirectory) {
+                                        doc.listFiles().forEach { deleteSafFile(it) }
+                                    }
+                                    doc.delete()
+                                }
+                                deleteSafFile(gameFile)
+                            }
+                        } else {
+                            deleteSuccess = false
+                            Toast.makeText(requireContext(), "File not found", Toast.LENGTH_SHORT).show()
                         }
-                    } else {
-                        Toast.makeText(requireContext(), "File not found", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        deleteSuccess = false
+                        Toast.makeText(requireContext(), "Failed to delete", Toast.LENGTH_SHORT).show()
                     }
-
-                    db.deleteDownload(slug, fileName)
-                    val prefs = requireContext().getSharedPreferences("romm_prefs", 0)
-                    viewModel.loadGames(slug, Uri.parse(prefs.getString("download_directory", null)))
-                } catch (e: Exception) {
-                    Toast.makeText(requireContext(), "Failed to delete", Toast.LENGTH_SHORT).show()
+                    if (deleteSuccess) {
+                        db.deleteDownload(slug, fileName)
+                        val prefs = requireContext().getSharedPreferences("romm_prefs", 0)
+                        viewModel.loadGames(slug, Uri.parse(prefs.getString("download_directory", null)))
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)

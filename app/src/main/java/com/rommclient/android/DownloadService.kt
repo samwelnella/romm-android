@@ -134,10 +134,16 @@ class DownloadService : Service() {
                             }
                         }
 
-                        val romFile = platformFolderDoc?.findFile(fileName)?.let {
-                            it.delete()
-                            null
-                        } ?: platformFolderDoc?.createFile("application/octet-stream", fileName)
+                        val contentType = urlConnection.contentType?.lowercase() ?: ""
+                        val isZipFile = contentType.contains("zip") || fileName.lowercase().endsWith(".zip")
+                        val romFile = if (isZipFile) {
+                            platformFolderDoc?.createFile("application/zip", fileName)
+                        } else {
+                            platformFolderDoc?.findFile(fileName)?.let {
+                                it.delete()
+                                null
+                            } ?: platformFolderDoc?.createFile("application/octet-stream", fileName)
+                        }
 
                         romFile?.let {
                             contentResolver.openOutputStream(it.uri)?.use { output ->
@@ -202,10 +208,57 @@ class DownloadService : Service() {
                                 fileName
                             )
                         }
+                        // --- Begin SAF zip extraction logic ---
+                        if (isZipFile && romFile != null) {
+                            try {
+                                val extractionFolder = platformFolderDoc?.createDirectory(fileName.removeSuffix(".zip"))
+                                if (extractionFolder == null) {
+                                    Log.e("DownloadService", "Failed to create SAF extraction folder for $fileName")
+                                    return@launch
+                                }
+                                // Open the zip file as a stream
+                                val zipStream = java.util.zip.ZipInputStream(contentResolver.openInputStream(romFile.uri))
+                                if (zipStream == null) {
+                                    Log.e("DownloadService", "Failed to open zip input stream for $fileName")
+                                    return@launch
+                                }
+                                var index = 0
+                                var entry = zipStream.nextEntry
+                                while (entry != null) {
+                                    val extractedFile = extractionFolder.createFile("application/octet-stream", entry.name)
+                                    if (extractedFile != null) {
+                                        contentResolver.openOutputStream(extractedFile.uri)?.use { out ->
+                                            zipStream.copyTo(out)
+                                        }
+                                    }
+                                    zipStream.closeEntry()
+                                    index++
+                                    showPerDownloadNotification(
+                                        this@DownloadService,
+                                        "Unpacking $fileName",
+                                        index,
+                                        downloadId,
+                                        "Unzipping file #$index"
+                                    )
+                                    entry = zipStream.nextEntry
+                                }
+                                zipStream.close()
+                                romFile.delete()
+                            } catch (e: Exception) {
+                                Log.e("DownloadService", "Failed to unzip to SAF: ${e.message}", e)
+                            }
+                        }
+                        // --- End SAF zip extraction logic ---
                     } else {
-                        val file = File(baseDir, "$platformFolder/$fileName")
-                        file.parentFile?.mkdirs()
-                        file.outputStream().use { output ->
+                        // --- Begin enhanced zip-handling logic ---
+                        val contentType = urlConnection.contentType?.lowercase() ?: ""
+                        val isZipFile = contentType.contains("zip") || fileName.lowercase().endsWith(".zip")
+                        val targetDir = File(baseDir, platformFolder)
+                        val finalDir = if (isZipFile) File(targetDir, fileName.removeSuffix(".zip")) else targetDir
+                        val targetFile = if (isZipFile) File(targetDir, fileName) else File(finalDir, fileName)
+                        finalDir.mkdirs()
+
+                        targetFile.outputStream().use { output ->
                             input.use { inp ->
                                 while (inp.read(buffer).also { read = it } >= 0) {
                                     output.write(buffer, 0, read)
@@ -255,7 +308,45 @@ class DownloadService : Service() {
                                 }
                             }
                         }
-                        Log.d("DownloadService", "Downloaded to ${file.absolutePath}")
+
+                        if (isZipFile) {
+                            try {
+                                // Extract to folder named after zip file (without .zip)
+                                val zipFolderName = fileName.removeSuffix(".zip")
+                                val extractionDir = File(targetDir, zipFolderName)
+                                extractionDir.mkdirs()
+                                java.util.zip.ZipFile(targetFile).use { zip ->
+                                    val entries = zip.entries()
+                                    var index = 0
+                                    while (entries.hasMoreElements()) {
+                                        val entry = entries.nextElement()
+                                        val outFile = File(extractionDir, entry.name)
+                                        if (entry.isDirectory) {
+                                            outFile.mkdirs()
+                                        } else {
+                                            outFile.parentFile?.mkdirs()
+                                            zip.getInputStream(entry).use { input ->
+                                                outFile.outputStream().use { output ->
+                                                    input.copyTo(output)
+                                                }
+                                            }
+                                        }
+                                        index++
+                                        showPerDownloadNotification(
+                                            this@DownloadService,
+                                            "Unpacking $fileName",
+                                            index,
+                                            downloadId,
+                                            "Unzipping file #$index"
+                                        )
+                                    }
+                                }
+                                targetFile.delete()
+                            } catch (e: Exception) {
+                                Log.e("DownloadService", "Failed to unzip ${targetFile.name}: ${e.message}", e)
+                            }
+                        }
+                        Log.d("DownloadService", "Downloaded to ${targetFile.absolutePath}")
                         RommDatabaseHelper(this@DownloadService).insertDownload(
                             platformSlug,
                             fileName
