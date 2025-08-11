@@ -59,6 +59,23 @@
                     }
                 },
                 {
+                    "source": "/Users/danielsamwel/Projects/RomM-Android-mk3/app/src/main/res/values/themes.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "81",
+                        "endOffsets": "132"
+                    },
+                    "to": {
+                        "startLines": "219",
+                        "startColumns": "4",
+                        "startOffsets": "13978",
+                        "endColumns": "80",
+                        "endOffsets": "14054"
+                    }
+                },
+                {
                     "source": "/Users/danielsamwel/.gradle/caches/transforms-3/a9b0aa7423e9efe1a9e4fe77e3f9b493/transformed/jetified-foundation-release/res/values/values.xml",
                     "from": {
                         "startLines": "2,3",
@@ -114,23 +131,6 @@
                     }
                 },
                 {
-                    "source": "/Users/danielsamwel/Downloads/RomM-Android-mk2/app/src/main/res/values/strings.xml",
-                    "from": {
-                        "startLines": "1,2,3",
-                        "startColumns": "4,4,4",
-                        "startOffsets": "16,58,126",
-                        "endColumns": "41,67,97",
-                        "endOffsets": "53,121,219"
-                    },
-                    "to": {
-                        "startLines": "108,120,121",
-                        "startColumns": "4,4,4",
-                        "startOffsets": "6569,7408,7476",
-                        "endColumns": "41,67,97",
-                        "endOffsets": "6606,7471,7569"
-                    }
-                },
-                {
                     "source": "/Users/danielsamwel/.gradle/caches/transforms-3/f3125b3b81dd8ee993f67df540cd8b03/transformed/lifecycle-runtime-2.7.0/res/values/values.xml",
                     "from": {
                         "startLines": "2",
@@ -183,23 +183,6 @@
                         "endLines": "244,250,260,433,437",
                         "endColumns": "24,24,24,24,24",
                         "endOffsets": "14922,15100,15384,21554,21681"
-                    }
-                },
-                {
-                    "source": "/Users/danielsamwel/Downloads/RomM-Android-mk2/app/src/main/res/values/themes.xml",
-                    "from": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "55",
-                        "endColumns": "81",
-                        "endOffsets": "132"
-                    },
-                    "to": {
-                        "startLines": "219",
-                        "startColumns": "4",
-                        "startOffsets": "13978",
-                        "endColumns": "80",
-                        "endOffsets": "14054"
                     }
                 },
                 {
@@ -321,6 +304,23 @@
                         "startOffsets": "4882,5059",
                         "endColumns": "53,66",
                         "endOffsets": "4931,5121"
+                    }
+                },
+                {
+                    "source": "/Users/danielsamwel/Projects/RomM-Android-mk3/app/src/main/res/values/strings.xml",
+                    "from": {
+                        "startLines": "1,2,3",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "16,58,126",
+                        "endColumns": "41,67,97",
+                        "endOffsets": "53,121,219"
+                    },
+                    "to": {
+                        "startLines": "108,120,121",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "6569,7408,7476",
+                        "endColumns": "41,67,97",
+                        "endOffsets": "6606,7471,7569"
                     }
                 }
             ]

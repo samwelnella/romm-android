@@ -4,7 +4,7 @@
             "outputFile": "com.romm.android.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml",
             "map": [
                 {
-                    "source": "/Users/danielsamwel/Downloads/RomM-Android-mk2/app/src/main/res/values-night/themes.xml",
+                    "source": "/Users/danielsamwel/Projects/RomM-Android-mk3/app/src/main/res/values-night/themes.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

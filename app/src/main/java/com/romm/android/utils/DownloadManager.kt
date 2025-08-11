@@ -54,12 +54,13 @@ class DownloadManager @Inject constructor(
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Downloads",
-                NotificationManager.IMPORTANCE_LOW // Use LOW importance to reduce individual notification prominence
+                NotificationManager.IMPORTANCE_DEFAULT // Use DEFAULT importance for proper grouping
             ).apply {
                 description = "Game and firmware downloads"
-                setShowBadge(false) // Don't show badges for individual notifications
-                enableLights(false)
-                enableVibration(false)
+                setShowBadge(true) // Show badge on summary notification
+                enableLights(false) // Disable lights to avoid distraction
+                enableVibration(false) // Disable vibration to avoid noise
+                setSound(null, null) // No sound for quiet operation
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -160,8 +161,9 @@ class DownloadManager @Inject constructor(
             .setGroup(UNIFIED_DOWNLOAD_GROUP)
             .setGroupSummary(true) // This is the summary notification
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority for summary
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
             .setAutoCancel(false) // Don't auto-cancel during progress
+            .setNumber(inProgress + completed) // Show count badge
             .build()
         
         notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
@@ -202,6 +204,8 @@ class DownloadManager @Inject constructor(
             .setGroup(UNIFIED_DOWNLOAD_GROUP)
             .setGroupSummary(true) // This is the summary notification
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
+            .setNumber(total) // Show total count badge
             .build()
         
         notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
@@ -532,6 +536,9 @@ class DownloadManager @Inject constructor(
     fun showIndividualDownloadNotification(gameName: String, isSuccess: Boolean, sessionId: String? = null) {
         if (sessionId == null) return
         
+        // Ensure the summary notification exists first - this is crucial for proper grouping
+        ensureSummaryNotificationExists(sessionId)
+        
         val title = if (isSuccess) "Downloaded" else "Failed"
         val text = gameName
         val icon = if (isSuccess) {
@@ -547,18 +554,23 @@ class DownloadManager @Inject constructor(
             .setSmallIcon(icon)
             .setGroup(UNIFIED_DOWNLOAD_GROUP) // Same group as summary
             .setGroupSummary(false) // This is NOT a summary notification
-            .setSilent(true) // Silent
-            .setAutoCancel(false) // Don't auto-cancel
+            .setSilent(true) // Silent - no sound, vibration, or lights
+            .setAutoCancel(false) // Don't auto-cancel so they persist in expanded view
             .setOngoing(false) // Not ongoing
-            .setPriority(NotificationCompat.PRIORITY_MIN) // Minimum priority
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only summary alerts
-            .setLocalOnly(true) // Local only
-            .setShowWhen(false) // Don't show timestamp
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Lower priority than summary to ensure proper ordering
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only summary notification alerts
+            .setLocalOnly(true) // Keep local to device
+            .setShowWhen(true) // Show timestamp to help distinguish between downloads
             .setOnlyAlertOnce(true) // Alert only once
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Public visibility
+            .setDefaults(0) // No defaults (sound, vibration, lights)
             .build()
         
         val notificationId = gameName.hashCode()
         notificationManager.notify(notificationId, notification)
+        
+        // Track this notification ID for later cleanup
+        individualNotificationIds.getOrPut(sessionId) { mutableListOf() }.add(notificationId)
         
         Log.d("DownloadManager", "Created child notification for: $gameName (success: $isSuccess, ID: $notificationId)")
     }

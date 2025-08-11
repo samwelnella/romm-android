@@ -60,9 +60,9 @@ com.romm.android.app-jetified-startup-runtime-1.1.1-58 /Users/danielsamwel/.grad
 com.romm.android.app-lifecycle-runtime-2.7.0-59 /Users/danielsamwel/.gradle/caches/transforms-3/f3125b3b81dd8ee993f67df540cd8b03/transformed/lifecycle-runtime-2.7.0/res
 com.romm.android.app-core-1.12.0-60 /Users/danielsamwel/.gradle/caches/transforms-3/fe9f7823216010d5b64699a103daf380/transformed/core-1.12.0/res
 com.romm.android.app-jetified-ui-util-release-61 /Users/danielsamwel/.gradle/caches/transforms-3/ff466fc283e9e0464e2d64b222a94752/transformed/jetified-ui-util-release/res
-com.romm.android.app-resValues-62 /Users/danielsamwel/Downloads/RomM-Android-mk2/app/build/generated/res/resValues/debug
-com.romm.android.app-packageDebugResources-63 /Users/danielsamwel/Downloads/RomM-Android-mk2/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
-com.romm.android.app-packageDebugResources-64 /Users/danielsamwel/Downloads/RomM-Android-mk2/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
-com.romm.android.app-merged_res-65 /Users/danielsamwel/Downloads/RomM-Android-mk2/app/build/intermediates/merged_res/debug
-com.romm.android.app-debug-66 /Users/danielsamwel/Downloads/RomM-Android-mk2/app/src/debug/res
-com.romm.android.app-main-67 /Users/danielsamwel/Downloads/RomM-Android-mk2/app/src/main/res
+com.romm.android.app-resValues-62 /Users/danielsamwel/Projects/RomM-Android-mk3/app/build/generated/res/resValues/debug
+com.romm.android.app-packageDebugResources-63 /Users/danielsamwel/Projects/RomM-Android-mk3/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.romm.android.app-packageDebugResources-64 /Users/danielsamwel/Projects/RomM-Android-mk3/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.romm.android.app-merged_res-65 /Users/danielsamwel/Projects/RomM-Android-mk3/app/build/intermediates/merged_res/debug
+com.romm.android.app-debug-66 /Users/danielsamwel/Projects/RomM-Android-mk3/app/src/debug/res
+com.romm.android.app-main-67 /Users/danielsamwel/Projects/RomM-Android-mk3/app/src/main/res

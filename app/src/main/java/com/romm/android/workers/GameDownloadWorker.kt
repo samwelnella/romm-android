@@ -319,7 +319,9 @@ class GameDownloadWorker @AssistedInject constructor(
             .setContentText(message)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setAutoCancel(true)
-            .setGroup(DownloadManager.INDIVIDUAL_DOWNLOAD_GROUP) // Use individual group
+            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use unified group for consistency
+            .setGroupSummary(false) // Not a summary notification
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority for errors
             .build()
         
         notificationManager.notify(System.currentTimeMillis().toInt(), notification)
@@ -332,7 +334,9 @@ class GameDownloadWorker @AssistedInject constructor(
             .setContentText(message)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setAutoCancel(true)
-            .setGroup(DownloadManager.INDIVIDUAL_DOWNLOAD_GROUP) // Use individual group
+            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use unified group for consistency
+            .setGroupSummary(false) // Not a summary notification
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority for success
             .build()
         
         notificationManager.notify(System.currentTimeMillis().toInt(), notification)

@@ -588,8 +588,8 @@ public final class DaggerRomMApplication_HiltComponents_SingletonC {
     }
 
     @Override
-    public void injectRomMApplication(RomMApplication arg0) {
-      injectRomMApplication2(arg0);
+    public void injectRomMApplication(RomMApplication romMApplication) {
+      injectRomMApplication2(romMApplication);
     }
 
     @Override
