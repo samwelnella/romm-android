@@ -53,7 +53,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
                 return Result.failure()
             }
             
-            // Foreground notifications now handled by DownloadManager global system
+            // Set foreground service for reliable downloads
+            setForeground(createForegroundInfo("Firmware: $fileName", 0))
             
             // Get the base directory DocumentFile
             val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(downloadDirectoryUri))
@@ -216,7 +217,30 @@ class FirmwareDownloadWorker @AssistedInject constructor(
         return directory.createFile("application/octet-stream", fileName)
     }
     
-    // Old foreground notification method removed - now handled by DownloadManager global system
+    /**
+     * Create foreground info for Android foreground service downloads
+     * This ensures downloads continue even when app is backgrounded
+     */
+    private suspend fun createForegroundInfo(title: String, progress: Int): ForegroundInfo {
+        val displayTitle = if (progress > 0) "$title ($progress%)" else "Starting: $title"
+        
+        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
+            .setContentTitle("Download Service")
+            .setContentText(displayTitle)
+            .setProgress(100, progress, progress == 0)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setSilent(true) // Silent so it doesn't interfere with our unified notifications
+            .setPriority(NotificationCompat.PRIORITY_MIN) // Low priority so it stays in background
+            .setGroup("foreground_downloads") // Separate group from unified notifications
+            .setGroupSummary(false)
+            .setShowWhen(false) // Don't show timestamp
+            .setLocalOnly(true)
+            .build()
+        
+        // Use a consistent foreground notification ID for this worker instance
+        return ForegroundInfo(this.hashCode(), notification)
+    }
     
     /**
      * Optimized file download with memory management
@@ -251,7 +275,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
                             if (progress >= lastProgressUpdate + 5) {
                                 lastProgressUpdate = progress
                                 onProgress(progress)
-                                // Foreground progress updates now handled by DownloadManager global system
+                                // Update foreground service notification with progress
+                                setForeground(createForegroundInfo(title, progress))
                                 
                                 // Force flush buffer periodically
                                 output.flush()

@@ -56,7 +56,8 @@ class GameDownloadWorker @AssistedInject constructor(
                 return Result.failure()
             }
             
-            // Foreground notifications now handled by DownloadManager global system
+            // Set foreground service for reliable downloads
+            setForeground(createForegroundInfo(gameName, 0))
             
             // Get detailed game info
             Log.d("GameDownloadWorker", "Fetching game details from API")
@@ -282,7 +283,30 @@ class GameDownloadWorker @AssistedInject constructor(
         return directory.delete()
     }
     
-    // Old notification methods removed - now handled by DownloadManager global system
+    /**
+     * Create foreground info for Android foreground service downloads
+     * This ensures downloads continue even when app is backgrounded
+     */
+    private suspend fun createForegroundInfo(gameName: String, progress: Int): ForegroundInfo {
+        val title = if (progress > 0) "Downloading $gameName ($progress%)" else "Starting download: $gameName"
+        
+        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
+            .setContentTitle("Download Service")
+            .setContentText(title)
+            .setProgress(100, progress, progress == 0)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setSilent(true) // Silent so it doesn't interfere with our unified notifications
+            .setPriority(NotificationCompat.PRIORITY_MIN) // Low priority so it stays in background
+            .setGroup("foreground_downloads") // Separate group from unified notifications
+            .setGroupSummary(false)
+            .setShowWhen(false) // Don't show timestamp
+            .setLocalOnly(true)
+            .build()
+        
+        // Use a consistent foreground notification ID for this worker instance
+        return ForegroundInfo(this.hashCode(), notification)
+    }
     
     /**
      * Optimized file download with memory management
@@ -322,7 +346,8 @@ class GameDownloadWorker @AssistedInject constructor(
                             if (progress >= lastProgressUpdate + 5) {
                                 lastProgressUpdate = progress
                                 onProgress(progress)
-                                // Foreground progress updates now handled by DownloadManager global system
+                                // Update foreground service notification with progress
+                                setForeground(createForegroundInfo(gameName, progress))
                                 
                                 // Force flush buffer periodically
                                 output.flush()
