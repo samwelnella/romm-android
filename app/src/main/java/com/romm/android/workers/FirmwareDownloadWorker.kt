@@ -53,7 +53,7 @@ class FirmwareDownloadWorker @AssistedInject constructor(
                 return Result.failure()
             }
             
-            setForeground(createForegroundInfo("Firmware: $fileName", 0))
+            // Foreground notifications now handled by DownloadManager global system
             
             // Get the base directory DocumentFile
             val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(downloadDirectoryUri))
@@ -92,52 +92,25 @@ class FirmwareDownloadWorker @AssistedInject constructor(
                 
                 android.util.Log.d("FirmwareDownloadWorker", "Download completed successfully for: $fileName")
                 
-                // Show appropriate notification based on download type
-                if (isBulkDownload) {
-                    // Show individual notification grouped under the summary
-                    val downloadManager = DownloadManager.getInstance(applicationContext)
-                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, true, bulkSessionId)
-                } else {
-                    // Show standalone success notification
-                    showSuccessNotification("Downloaded: $fileName")
-                }
+                // Success notifications now handled by DownloadManager global system
                 
                 android.util.Log.d("FirmwareDownloadWorker", "=== FIRMWARE WORKER SUCCESS === File: $fileName")
                 Result.success()
             } else {
                 android.util.Log.e("FirmwareDownloadWorker", "Download failed with response code: ${response.code()}")
-                if (isBulkDownload) {
-                    val downloadManager = DownloadManager.getInstance(applicationContext)
-                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
-                } else {
-                    showErrorNotification("Download failed: Server error ${response.code()}")
-                }
+                // Error notifications now handled by DownloadManager global system
                 Result.failure()
             }
         } catch (e: OutOfMemoryError) {
             val catchFileName = inputData.getString("fileName") ?: ""
             android.util.Log.e("FirmwareDownloadWorker", "=== FIRMWARE WORKER FAILURE (OOM) === File: $catchFileName", e)
-            val isBulkDownload = inputData.getBoolean("isBulkDownload", false)
-            val bulkSessionId = inputData.getString("bulkSessionId")
-            if (isBulkDownload) {
-                val downloadManager = DownloadManager.getInstance(applicationContext)
-                downloadManager?.showIndividualFirmwareDownloadNotification(catchFileName, false, bulkSessionId)
-            } else {
-                showErrorNotification("Download failed: Out of memory")
-            }
+            // Error notifications now handled by DownloadManager global system
             System.gc() // Force garbage collection
             Result.failure()
         } catch (e: Exception) {
             val catchFileName = inputData.getString("fileName") ?: ""
             android.util.Log.e("FirmwareDownloadWorker", "=== FIRMWARE WORKER FAILURE (Exception) === File: $catchFileName", e)
-            val isBulkDownload = inputData.getBoolean("isBulkDownload", false)
-            val bulkSessionId = inputData.getString("bulkSessionId")
-            if (isBulkDownload) {
-                val downloadManager = DownloadManager.getInstance(applicationContext)
-                downloadManager?.showIndividualFirmwareDownloadNotification(catchFileName, false, bulkSessionId)
-            } else {
-                showErrorNotification("Download failed: ${e.message}")
-            }
+            // Error notifications now handled by DownloadManager global system
             Result.failure()
         }
     }
@@ -243,16 +216,7 @@ class FirmwareDownloadWorker @AssistedInject constructor(
         return directory.createFile("application/octet-stream", fileName)
     }
     
-    private suspend fun createForegroundInfo(title: String, progress: Int): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Downloading $title")
-            .setProgress(100, progress, progress == 0)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
-            .build()
-        
-        return ForegroundInfo(title.hashCode(), notification)
-    }
+    // Old foreground notification method removed - now handled by DownloadManager global system
     
     /**
      * Optimized file download with memory management
@@ -287,7 +251,7 @@ class FirmwareDownloadWorker @AssistedInject constructor(
                             if (progress >= lastProgressUpdate + 5) {
                                 lastProgressUpdate = progress
                                 onProgress(progress)
-                                setForeground(createForegroundInfo(title, progress))
+                                // Foreground progress updates now handled by DownloadManager global system
                                 
                                 // Force flush buffer periodically
                                 output.flush()
@@ -304,70 +268,6 @@ class FirmwareDownloadWorker @AssistedInject constructor(
         }
     }
     
-    private fun showErrorNotification(message: String) {
-        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Firmware Download Error")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setAutoCancel(true)
-            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use unified group for consistency
-            .setGroupSummary(false) // Not a summary notification
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority for errors
-            .build()
-        
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
-    }
+    // Old notification methods removed - now handled by DownloadManager global system
     
-    private fun showSuccessNotification(message: String) {
-        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Firmware Download Complete")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setAutoCancel(true)
-            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use unified group for consistency
-            .setGroupSummary(false) // Not a summary notification
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority for success
-            .build()
-        
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
-    }
-    
-    private fun showIndividualFirmwareDownloadNotification(fileName: String, isSuccess: Boolean, sessionId: String?) {
-        if (sessionId == null) return
-        
-        val title = if (isSuccess) "Downloaded" else "Failed"
-        val text = fileName
-        val icon = if (isSuccess) {
-            android.R.drawable.stat_sys_download_done
-        } else {
-            android.R.drawable.stat_notify_error
-        }
-        
-        // Create child notification that should be hidden by default
-        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(icon)
-            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Same group as summary
-            .setGroupSummary(false) // This is NOT a summary notification
-            .setSilent(true) // Silent - no sound, vibration, or lights
-            .setAutoCancel(false) // Don't auto-cancel so they persist in expanded view
-            .setOngoing(false) // Not ongoing
-            .setPriority(NotificationCompat.PRIORITY_LOW) // Lower priority than summary to ensure proper ordering
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only summary notification alerts
-            .setLocalOnly(true) // Keep local to device
-            .setShowWhen(true) // Show timestamp to help distinguish between downloads
-            .setOnlyAlertOnce(true) // Alert only once
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Public visibility
-            .setDefaults(0) // No defaults (sound, vibration, lights)
-            .build()
-        
-        val notificationId = fileName.hashCode()
-        notificationManager.notify(notificationId, notification)
-        
-        android.util.Log.d("FirmwareDownloadWorker", "Created child firmware notification for: $fileName (success: $isSuccess, ID: $notificationId)")
-    }
 }

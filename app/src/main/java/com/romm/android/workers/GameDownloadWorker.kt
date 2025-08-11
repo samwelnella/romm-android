@@ -52,11 +52,11 @@ class GameDownloadWorker @AssistedInject constructor(
         return try {
             if (downloadDirectoryUri.isEmpty()) {
                 Log.e("GameDownloadWorker", "Download directory URI is empty")
-                showErrorNotification("Download failed: No download directory")
+                // Error notifications now handled by DownloadManager global system
                 return Result.failure()
             }
             
-            setForeground(createForegroundInfo(gameName, 0))
+            // Foreground notifications now handled by DownloadManager global system
             
             // Get detailed game info
             Log.d("GameDownloadWorker", "Fetching game details from API")
@@ -67,7 +67,7 @@ class GameDownloadWorker @AssistedInject constructor(
             val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(downloadDirectoryUri))
             if (baseDir == null) {
                 Log.e("GameDownloadWorker", "Could not access base directory from URI: $downloadDirectoryUri")
-                showErrorNotification("Download failed: Cannot access download directory")
+                // Error notifications now handled by DownloadManager global system
                 return Result.failure()
             }
             
@@ -78,7 +78,7 @@ class GameDownloadWorker @AssistedInject constructor(
             
             if (platformDir == null) {
                 Log.e("GameDownloadWorker", "Could not create platform directory: $platformSlug")
-                showErrorNotification("Download failed: Cannot create platform directory")
+                // Error notifications now handled by DownloadManager global system
                 return Result.failure()
             }
             
@@ -109,7 +109,7 @@ class GameDownloadWorker @AssistedInject constructor(
                     
                     if (targetDir == null) {
                         Log.e("GameDownloadWorker", "Could not create target directory")
-                        showErrorNotification("Download failed: Cannot create game directory")
+                        // Error notifications now handled by DownloadManager global system
                         return Result.failure()
                     }
                     
@@ -117,7 +117,7 @@ class GameDownloadWorker @AssistedInject constructor(
                     val outputFile = createOrReplaceFile(targetDir, fileName)
                     if (outputFile == null) {
                         Log.e("GameDownloadWorker", "Could not create output file: $fileName")
-                        showErrorNotification("Download failed: Cannot create file")
+                        // Error notifications now handled by DownloadManager global system
                         return Result.failure()
                     }
                     
@@ -138,14 +138,7 @@ class GameDownloadWorker @AssistedInject constructor(
                     
                     Log.d("GameDownloadWorker", "Download completed successfully for: $gameName")
                     
-                    // Show appropriate notification based on download type
-                    if (isBulkDownload) {
-                        // Show individual notification grouped under the summary
-                        downloadManager.showIndividualDownloadNotification(gameName, true, bulkSessionId)
-                    } else {
-                        // Show standalone success notification
-                        showSuccessNotification("Downloaded: $gameName")
-                    }
+                    // Success notifications now handled by DownloadManager global system
                     
                     // Force garbage collection to free memory
                     System.gc()
@@ -155,29 +148,17 @@ class GameDownloadWorker @AssistedInject constructor(
                 Result.success()
             } else {
                 Log.e("GameDownloadWorker", "Download failed with response code: ${response.code()}")
-                if (isBulkDownload) {
-                    downloadManager.showIndividualDownloadNotification(gameName, false, bulkSessionId)
-                } else {
-                    showErrorNotification("Download failed: Server error ${response.code()}")
-                }
+                // Error notifications now handled by DownloadManager global system
                 Result.failure()
             }
         } catch (e: OutOfMemoryError) {
             Log.e("GameDownloadWorker", "=== WORKER FAILURE (OOM) === Game: $gameName", e)
-            if (isBulkDownload) {
-                downloadManager.showIndividualDownloadNotification(gameName, false, bulkSessionId)
-            } else {
-                showErrorNotification("Download failed: Out of memory")
-            }
+            // Error notifications now handled by DownloadManager global system
             System.gc() // Force garbage collection
             Result.failure()
         } catch (e: Exception) {
             Log.e("GameDownloadWorker", "=== WORKER FAILURE (Exception) === Game: $gameName", e)
-            if (isBulkDownload) {
-                downloadManager.showIndividualDownloadNotification(gameName, false, bulkSessionId)
-            } else {
-                showErrorNotification("Download failed: ${e.message}")
-            }
+            // Error notifications now handled by DownloadManager global system
             Result.failure()
         }
     }
@@ -301,46 +282,7 @@ class GameDownloadWorker @AssistedInject constructor(
         return directory.delete()
     }
     
-    private suspend fun createForegroundInfo(gameName: String, progress: Int): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Downloading $gameName")
-            .setProgress(100, progress, progress == 0)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
-            .build()
-        
-        return ForegroundInfo(gameName.hashCode(), notification)
-    }
-    
-    private fun showErrorNotification(message: String) {
-        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Download Error")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setAutoCancel(true)
-            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use unified group for consistency
-            .setGroupSummary(false) // Not a summary notification
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority for errors
-            .build()
-        
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
-    }
-    
-    private fun showSuccessNotification(message: String) {
-        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Download Complete")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setAutoCancel(true)
-            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use unified group for consistency
-            .setGroupSummary(false) // Not a summary notification
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority for success
-            .build()
-        
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
-    }
+    // Old notification methods removed - now handled by DownloadManager global system
     
     /**
      * Optimized file download with memory management
@@ -380,7 +322,7 @@ class GameDownloadWorker @AssistedInject constructor(
                             if (progress >= lastProgressUpdate + 5) {
                                 lastProgressUpdate = progress
                                 onProgress(progress)
-                                setForeground(createForegroundInfo(gameName, progress))
+                                // Foreground progress updates now handled by DownloadManager global system
                                 
                                 // Force flush buffer periodically
                                 output.flush()

@@ -265,8 +265,24 @@ class DownloadManager @Inject constructor(
     private fun showIndividualDownloadNotification(downloadId: String, status: IndividualDownloadStatus) {
         val cancelIntent = createCancelAllPendingIntent()
         
+        // Determine notification content and ordering based on status
+        val (title, timestamp, priority) = when {
+            status.progress > 0 -> {
+                // Active downloads: show at top with highest priority and earliest timestamp
+                Triple("Downloading (${status.progress}%)", System.currentTimeMillis() - 1000000, NotificationCompat.PRIORITY_HIGH)
+            }
+            status.isActive -> {
+                // Starting/queued downloads: show in middle with medium priority
+                Triple("Starting...", System.currentTimeMillis() - 500000, NotificationCompat.PRIORITY_DEFAULT)
+            }
+            else -> {
+                // Queued/waiting downloads: show at bottom with latest timestamp
+                Triple("Queued", System.currentTimeMillis(), NotificationCompat.PRIORITY_LOW)
+            }
+        }
+        
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("Downloading")
+            .setContentTitle(title)
             .setContentText(status.displayName)
             .setProgress(100, status.progress, status.progress == 0)
             .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -274,17 +290,18 @@ class DownloadManager @Inject constructor(
             .setGroupSummary(false) // This is a child notification
             .setSilent(true) // No sound for individual notifications
             .setAutoCancel(false)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setOngoing(status.progress > 0) // Only ongoing for active downloads
+            .setPriority(priority)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-            .setShowWhen(false)
+            .setShowWhen(true) // Show timestamp for ordering
+            .setWhen(timestamp) // Set custom timestamp for ordering
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelIntent)
             .build()
         
         val notificationId = downloadId.hashCode()
         notificationManager.notify(notificationId, notification)
         
-        Log.d("DownloadManager", "Created individual notification for: ${status.displayName} (progress: ${status.progress}%, ID: $notificationId)")
+        Log.d("DownloadManager", "Created individual notification for: ${status.displayName} (progress: ${status.progress}%, status: $title, ID: $notificationId)")
     }
     
     /**
