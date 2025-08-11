@@ -46,10 +46,6 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             
             if (downloadDirectoryUri.isEmpty()) {
                 android.util.Log.e("FirmwareDownloadWorker", "Download directory URI is empty")
-                if (isBulkDownload) {
-                    val downloadManager = DownloadManager.getInstance(applicationContext)
-                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
-                }
                 return Result.failure()
             }
             
@@ -60,10 +56,6 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(downloadDirectoryUri))
             if (baseDir == null) {
                 android.util.Log.e("FirmwareDownloadWorker", "Could not access base directory from URI: $downloadDirectoryUri")
-                if (isBulkDownload) {
-                    val downloadManager = DownloadManager.getInstance(applicationContext)
-                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
-                }
                 return Result.failure()
             }
             
@@ -71,10 +63,6 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             val firmwareDir = getOrCreateFirmwareDirectory(baseDir)
             if (firmwareDir == null) {
                 android.util.Log.e("FirmwareDownloadWorker", "Could not create firmware directory")
-                if (isBulkDownload) {
-                    val downloadManager = DownloadManager.getInstance(applicationContext)
-                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
-                }
                 return Result.failure()
             }
             
@@ -225,16 +213,15 @@ class FirmwareDownloadWorker @AssistedInject constructor(
         val displayTitle = if (progress > 0) "$title ($progress%)" else "Starting: $title"
         
         val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Download Service")
-            .setContentText(displayTitle)
+            .setContentTitle(displayTitle)
+            .setContentText("Downloading...")
             .setProgress(100, progress, progress == 0)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setSilent(true) // Silent so it doesn't interfere with our unified notifications
-            .setPriority(NotificationCompat.PRIORITY_MIN) // Low priority so it stays in background
-            .setGroup("foreground_downloads") // Separate group from unified notifications
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority as child notification
+            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use same group as unified notifications
             .setGroupSummary(false)
-            .setShowWhen(false) // Don't show timestamp
+            .setShowWhen(false)
             .setLocalOnly(true)
             .build()
         

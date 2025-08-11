@@ -288,19 +288,18 @@ class GameDownloadWorker @AssistedInject constructor(
      * This ensures downloads continue even when app is backgrounded
      */
     private suspend fun createForegroundInfo(gameName: String, progress: Int): ForegroundInfo {
-        val title = if (progress > 0) "Downloading $gameName ($progress%)" else "Starting download: $gameName"
+        val title = if (progress > 0) "$gameName ($progress%)" else "Starting: $gameName"
         
         val notification = NotificationCompat.Builder(applicationContext, DownloadManager.CHANNEL_ID)
-            .setContentTitle("Download Service")
-            .setContentText(title)
+            .setContentTitle(title)
+            .setContentText("Downloading...")
             .setProgress(100, progress, progress == 0)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setSilent(true) // Silent so it doesn't interfere with our unified notifications
-            .setPriority(NotificationCompat.PRIORITY_MIN) // Low priority so it stays in background
-            .setGroup("foreground_downloads") // Separate group from unified notifications
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority as child notification
+            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use same group as unified notifications
             .setGroupSummary(false)
-            .setShowWhen(false) // Don't show timestamp
+            .setShowWhen(false)
             .setLocalOnly(true)
             .build()
         

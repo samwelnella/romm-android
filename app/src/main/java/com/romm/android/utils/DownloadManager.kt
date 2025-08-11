@@ -667,11 +667,8 @@ class DownloadManager @Inject constructor(
         globalDownloadSession?.let { session ->
             notificationManager.cancel(SUMMARY_NOTIFICATION_ID)
             
-            // Clear all individual notifications
-            session.allDownloadIds.forEach { downloadId ->
-                val notificationId = downloadId.hashCode()
-                notificationManager.cancel(notificationId)
-            }
+            // Individual foreground service notifications will be automatically 
+            // cleared when the workers are cancelled
         }
         
         // Reset session and tracking
@@ -693,11 +690,8 @@ class DownloadManager @Inject constructor(
         // Cancel summary notification
         notificationManager.cancel(SUMMARY_NOTIFICATION_ID)
         
-        // Cancel all individual notifications
-        globalDownloadSession?.allDownloadIds?.forEach { downloadId ->
-            val notificationId = downloadId.hashCode()
-            notificationManager.cancel(notificationId)
-        }
+        // Individual foreground service notifications will be automatically 
+        // cleared when downloads complete or are cancelled
         
         // Stop monitoring job
         monitoringJob?.cancel()
