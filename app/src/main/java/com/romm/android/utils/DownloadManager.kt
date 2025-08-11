@@ -437,12 +437,38 @@ class DownloadManager @Inject constructor(
             return
         }
         
+        if (firmware.isEmpty()) {
+            showErrorNotification("No firmware to download")
+            return
+        }
+        
+        // Create or use existing unified session for firmware downloads
+        val sessionId = currentDownloadSession ?: run {
+            val newSessionId = "firmware_${System.currentTimeMillis()}"
+            currentDownloadSession = newSessionId
+            
+            // Clear any existing notifications when starting fresh
+            clearUnifiedDownloadNotifications()
+            newSessionId
+        }
+        
+        Log.d("DownloadManager", "Using unified session for firmware download: $sessionId")
+        
+        // Create tracker for firmware downloads
+        val firmwareNames = firmware.map { it.file_name }
+        currentDownloadTracker[sessionId] = DownloadTracker(
+            totalGames = firmware.size,
+            gameNames = firmwareNames.toMutableList(),
+            workIds = mutableListOf(),
+            sessionType = DownloadSessionType.BULK
+        )
+        
         // Set up constraints
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
         
-        firmware.forEach { fw ->
+        firmware.forEachIndexed { index, fw ->
             val workRequest = OneTimeWorkRequestBuilder<FirmwareDownloadWorker>()
                 .setInputData(
                     workDataOf(
@@ -452,14 +478,24 @@ class DownloadManager @Inject constructor(
                         "host" to settings.host,
                         "username" to settings.username,
                         "password" to settings.password,
-                        "downloadDirectory" to settings.downloadDirectory
+                        "downloadDirectory" to settings.downloadDirectory,
+                        "isBulkDownload" to true,
+                        "bulkSessionId" to sessionId,
+                        "totalFiles" to firmware.size,
+                        "fileIndex" to index
                     )
                 )
                 .setConstraints(constraints)
                 .addTag("firmware_download")
+                .addTag("unified_download")
+                .addTag(sessionId)
+                .addTag("firmware_${fw.id}")
                 .build()
             
-            // Use unique names for firmware downloads too
+            // Store work ID for tracking
+            currentDownloadTracker[sessionId]?.workIds?.add(workRequest.id.toString())
+            
+            // Use unique names for firmware downloads
             val uniqueWorkName = "download_firmware_${fw.id}_${System.currentTimeMillis()}"
             workManager.enqueueUniqueWork(
                 uniqueWorkName,
@@ -468,7 +504,22 @@ class DownloadManager @Inject constructor(
             )
         }
         
-        showDownloadStartedNotification("Starting firmware download")
+        // Show initial unified download notification for firmware
+        showUnifiedFirmwareDownloadProgressNotification(
+            sessionId = sessionId,
+            completed = 0,
+            failed = 0,
+            inProgress = firmware.size,
+            total = firmware.size
+        )
+        
+        // Start monitoring if not already started
+        if (!monitoringJobs.containsKey(sessionId)) {
+            Log.d("DownloadManager", "Starting monitoring for firmware session: $sessionId")
+            startMonitoringFirmwareDownload(sessionId)
+        }
+        
+        Log.d("DownloadManager", "Successfully enqueued ${firmware.size} firmware download requests with session ID: $sessionId")
     }
     
     fun cancelAllDownloads() {
@@ -576,6 +627,51 @@ class DownloadManager @Inject constructor(
     }
     
     /**
+     * Show individual firmware download notification that only appears when summary is expanded
+     */
+    fun showIndividualFirmwareDownloadNotification(fileName: String, isSuccess: Boolean, sessionId: String? = null) {
+        if (sessionId == null) return
+        
+        // Ensure the summary notification exists first - this is crucial for proper grouping
+        ensureSummaryNotificationExists(sessionId)
+        
+        val title = if (isSuccess) "Downloaded" else "Failed"
+        val text = fileName
+        val icon = if (isSuccess) {
+            android.R.drawable.stat_sys_download_done
+        } else {
+            android.R.drawable.stat_notify_error
+        }
+        
+        // Create child notification that should be hidden by default
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(icon)
+            .setGroup(UNIFIED_DOWNLOAD_GROUP) // Same group as summary
+            .setGroupSummary(false) // This is NOT a summary notification
+            .setSilent(true) // Silent - no sound, vibration, or lights
+            .setAutoCancel(false) // Don't auto-cancel so they persist in expanded view
+            .setOngoing(false) // Not ongoing
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Lower priority than summary to ensure proper ordering
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only summary notification alerts
+            .setLocalOnly(true) // Keep local to device
+            .setShowWhen(true) // Show timestamp to help distinguish between downloads
+            .setOnlyAlertOnce(true) // Alert only once
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Public visibility
+            .setDefaults(0) // No defaults (sound, vibration, lights)
+            .build()
+        
+        val notificationId = fileName.hashCode()
+        notificationManager.notify(notificationId, notification)
+        
+        // Track this notification ID for later cleanup
+        individualNotificationIds.getOrPut(sessionId) { mutableListOf() }.add(notificationId)
+        
+        Log.d("DownloadManager", "Created child firmware notification for: $fileName (success: $isSuccess, ID: $notificationId)")
+    }
+    
+    /**
      * Ensure the summary notification exists before creating child notifications
      */
     private fun ensureSummaryNotificationExists(sessionId: String) {
@@ -645,6 +741,151 @@ class DownloadManager @Inject constructor(
         Log.d("DownloadManager", "Cleaned up ${notificationIds?.size ?: 0} individual notifications for session: $sessionId")
     }
     
+    private fun showUnifiedFirmwareDownloadProgressNotification(
+        sessionId: String,
+        completed: Int,
+        failed: Int,
+        inProgress: Int,
+        total: Int
+    ) {
+        val title = "Downloading Firmware"
+        val text = if (failed > 0) {
+            "Progress: $completed/$total completed, $failed failed, $inProgress in progress"
+        } else {
+            "Progress: $completed/$total completed, $inProgress in progress"
+        }
+        
+        Log.d("DownloadManager", "Updating unified firmware notification: $text")
+        
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setProgress(total, completed, false)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setSilent(true) // Don't make noise for progress updates
+            .setGroup(UNIFIED_DOWNLOAD_GROUP)
+            .setGroupSummary(true) // This is the summary notification
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
+            .setAutoCancel(false) // Don't auto-cancel during progress
+            .setNumber(inProgress + completed) // Show count badge
+            .build()
+        
+        notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
+    }
+    
+    private fun showUnifiedFirmwareDownloadCompleteNotification(
+        sessionId: String,
+        completed: Int,
+        failed: Int,
+        total: Int
+    ) {
+        val title = when {
+            failed == 0 -> "All Firmware Downloads Complete!"
+            completed == 0 -> "All Firmware Downloads Failed"
+            else -> "Firmware Downloads Complete"
+        }
+        
+        val text = when {
+            failed == 0 -> "Successfully downloaded $completed firmware ${if (completed == 1) "file" else "files"}"
+            completed == 0 -> "Failed to download $failed firmware ${if (failed == 1) "file" else "files"}"
+            else -> "Downloaded $completed firmware ${if (completed == 1) "file" else "files"}, $failed failed"
+        }
+        
+        val icon = if (failed == 0) {
+            android.R.drawable.stat_sys_download_done
+        } else {
+            android.R.drawable.stat_notify_error
+        }
+        
+        Log.d("DownloadManager", "Final unified firmware notification: $title - $text")
+        
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(icon)
+            .setAutoCancel(true)
+            .setOngoing(false) // Not ongoing anymore
+            .setGroup(UNIFIED_DOWNLOAD_GROUP)
+            .setGroupSummary(true) // This is the summary notification
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
+            .setNumber(total) // Show total count badge
+            .build()
+        
+        notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
+    }
+    
+    private fun startMonitoringFirmwareDownload(sessionId: String) {
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            Log.d("DownloadManager", "Starting monitoring for firmware session: $sessionId")
+            
+            while (currentDownloadTracker.containsKey(sessionId)) {
+                try {
+                    val tracker = currentDownloadTracker[sessionId] ?: break
+                    
+                    // Get work info for this session
+                    val workInfos = workManager.getWorkInfosByTag(sessionId).get()
+                    
+                    val completed = workInfos.count { it.state == WorkInfo.State.SUCCEEDED }
+                    val failed = workInfos.count { it.state == WorkInfo.State.FAILED || it.state == WorkInfo.State.CANCELLED }
+                    val running = workInfos.count { it.state == WorkInfo.State.RUNNING }
+                    val enqueued = workInfos.count { it.state == WorkInfo.State.ENQUEUED }
+                    val total = tracker.totalGames
+                    
+                    Log.d("DownloadManager", "Firmware session $sessionId progress: $completed completed, $failed failed, $running running, $enqueued enqueued out of $total")
+                    
+                    // Update notification
+                    if (completed + failed < total) {
+                        // Still in progress
+                        showUnifiedFirmwareDownloadProgressNotification(
+                            sessionId = sessionId,
+                            completed = completed,
+                            failed = failed,
+                            inProgress = running + enqueued,
+                            total = total
+                        )
+                    } else {
+                        // All done
+                        Log.d("DownloadManager", "Firmware download session $sessionId completed: $completed success, $failed failed")
+                        showUnifiedFirmwareDownloadCompleteNotification(
+                            sessionId = sessionId,
+                            completed = completed,
+                            failed = failed,
+                            total = total
+                        )
+                        
+                        // Clean up individual notifications after a delay to let users see the summary
+                        CoroutineScope(Dispatchers.IO).launch {
+                            delay(10000) // Wait 10 seconds
+                            cleanupIndividualNotifications(sessionId)
+                        }
+                        
+                        // Clean up tracker and reset current session if this was it
+                        currentDownloadTracker.remove(sessionId)
+                        if (currentDownloadSession == sessionId) {
+                            currentDownloadSession = null
+                        }
+                        break
+                    }
+                    
+                    // Check every 2 seconds
+                    delay(2000)
+                    
+                } catch (e: Exception) {
+                    Log.e("DownloadManager", "Error monitoring firmware download session $sessionId", e)
+                    break
+                }
+            }
+            
+            Log.d("DownloadManager", "Stopped monitoring firmware session: $sessionId")
+            monitoringJobs.remove(sessionId)
+        }
+        
+        monitoringJobs[sessionId] = job
+    }
+    
     private fun showDownloadStartedNotification(message: String) {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Download Started")
@@ -709,6 +950,17 @@ class DownloadManager @Inject constructor(
         const val ERROR_NOTIFICATION_ID = 1002
         const val UNIFIED_DOWNLOAD_GROUP = "unified_downloads"
         const val INDIVIDUAL_DOWNLOAD_GROUP = "individual_downloads"
+        
+        // Temporary workaround to get DownloadManager instance from workers
+        fun getInstance(context: Context): DownloadManager? {
+            return try {
+                // Try to get the instance from Hilt
+                context.applicationContext as? android.app.Application
+                null // Let the worker handle notifications without DownloadManager
+            } catch (e: Exception) {
+                null
+            }
+        }
     }
 }
 
