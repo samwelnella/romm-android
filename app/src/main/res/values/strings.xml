@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">RomM</string>
+    <string name="download_notification_channel">Downloads</string>
+    <string name="download_notification_channel_description">Game and firmware downloads</string>
+</resources>

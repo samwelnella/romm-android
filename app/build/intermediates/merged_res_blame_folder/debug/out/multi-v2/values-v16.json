@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.romm.android.app-mergeDebugResources-64:/values-v16/values-v16.xml",
+            "map": [
+                {
+                    "source": "/Users/danielsamwel/.gradle/caches/transforms-3/fe9f7823216010d5b64699a103daf380/transformed/core-1.12.0/res/values-v16/values-v16.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "65",
+                        "endOffsets": "116"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,39 @@
+package com.romm.android.workers
+
+import android.content.Context
+import android.util.Log
+import androidx.work.ListenableWorker
+import androidx.work.WorkerFactory
+import androidx.work.WorkerParameters
+import com.romm.android.network.RomMApiService
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class ChildWorkerFactory @Inject constructor(
+    private val apiService: RomMApiService
+) : WorkerFactory() {
+    
+    override fun createWorker(
+        appContext: Context,
+        workerClassName: String,
+        workerParameters: WorkerParameters
+    ): ListenableWorker? {
+        Log.d("ChildWorkerFactory", "Creating worker: $workerClassName")
+        
+        return when (workerClassName) {
+            GameDownloadWorker::class.java.name -> {
+                Log.d("ChildWorkerFactory", "Creating GameDownloadWorker")
+                GameDownloadWorker(appContext, workerParameters, apiService)
+            }
+            FirmwareDownloadWorker::class.java.name -> {
+                Log.d("ChildWorkerFactory", "Creating FirmwareDownloadWorker")
+                FirmwareDownloadWorker(appContext, workerParameters, apiService)
+            }
+            else -> {
+                Log.w("ChildWorkerFactory", "Unknown worker class: $workerClassName")
+                null
+            }
+        }
+    }
+}
