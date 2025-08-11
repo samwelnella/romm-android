@@ -42,7 +42,9 @@ fun GameDetailsScreen(
         }
         
         item {
-            Card {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -75,7 +77,9 @@ fun GameDetailsScreen(
         
         if (game.summary?.isNotEmpty() == true) {
             item {
-                Card {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -95,7 +99,9 @@ fun GameDetailsScreen(
         
         if (game.files.isNotEmpty()) {
             item {
-                Card {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
