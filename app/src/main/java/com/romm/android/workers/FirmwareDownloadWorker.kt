@@ -47,7 +47,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             if (downloadDirectoryUri.isEmpty()) {
                 android.util.Log.e("FirmwareDownloadWorker", "Download directory URI is empty")
                 if (isBulkDownload) {
-                    showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
+                    val downloadManager = DownloadManager.getInstance(applicationContext)
+                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
                 }
                 return Result.failure()
             }
@@ -59,7 +60,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             if (baseDir == null) {
                 android.util.Log.e("FirmwareDownloadWorker", "Could not access base directory from URI: $downloadDirectoryUri")
                 if (isBulkDownload) {
-                    showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
+                    val downloadManager = DownloadManager.getInstance(applicationContext)
+                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
                 }
                 return Result.failure()
             }
@@ -69,7 +71,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             if (firmwareDir == null) {
                 android.util.Log.e("FirmwareDownloadWorker", "Could not create firmware directory")
                 if (isBulkDownload) {
-                    showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
+                    val downloadManager = DownloadManager.getInstance(applicationContext)
+                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
                 }
                 return Result.failure()
             }
@@ -92,7 +95,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
                 // Show appropriate notification based on download type
                 if (isBulkDownload) {
                     // Show individual notification grouped under the summary
-                    showIndividualFirmwareDownloadNotification(fileName, true, bulkSessionId)
+                    val downloadManager = DownloadManager.getInstance(applicationContext)
+                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, true, bulkSessionId)
                 } else {
                     // Show standalone success notification
                     showSuccessNotification("Downloaded: $fileName")
@@ -103,7 +107,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             } else {
                 android.util.Log.e("FirmwareDownloadWorker", "Download failed with response code: ${response.code()}")
                 if (isBulkDownload) {
-                    showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
+                    val downloadManager = DownloadManager.getInstance(applicationContext)
+                    downloadManager?.showIndividualFirmwareDownloadNotification(fileName, false, bulkSessionId)
                 } else {
                     showErrorNotification("Download failed: Server error ${response.code()}")
                 }
@@ -115,7 +120,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             val isBulkDownload = inputData.getBoolean("isBulkDownload", false)
             val bulkSessionId = inputData.getString("bulkSessionId")
             if (isBulkDownload) {
-                showIndividualFirmwareDownloadNotification(catchFileName, false, bulkSessionId)
+                val downloadManager = DownloadManager.getInstance(applicationContext)
+                downloadManager?.showIndividualFirmwareDownloadNotification(catchFileName, false, bulkSessionId)
             } else {
                 showErrorNotification("Download failed: Out of memory")
             }
@@ -127,7 +133,8 @@ class FirmwareDownloadWorker @AssistedInject constructor(
             val isBulkDownload = inputData.getBoolean("isBulkDownload", false)
             val bulkSessionId = inputData.getString("bulkSessionId")
             if (isBulkDownload) {
-                showIndividualFirmwareDownloadNotification(catchFileName, false, bulkSessionId)
+                val downloadManager = DownloadManager.getInstance(applicationContext)
+                downloadManager?.showIndividualFirmwareDownloadNotification(catchFileName, false, bulkSessionId)
             } else {
                 showErrorNotification("Download failed: ${e.message}")
             }

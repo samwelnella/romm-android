@@ -47,6 +47,7 @@ class DownloadManager @Inject constructor(
     
     init {
         createNotificationChannel()
+        setInstance(this)
     }
     
     private fun createNotificationChannel() {
@@ -85,25 +86,45 @@ class DownloadManager @Inject constructor(
                     
                     Log.d("DownloadManager", "Session $sessionId progress: $completed completed, $failed failed, $running running, $enqueued enqueued out of $total")
                     
-                    // Update notification
+                    // Update notification based on session type
+                    val isFirmwareSession = sessionId.startsWith("firmware_")
                     if (completed + failed < total) {
                         // Still in progress
-                        showUnifiedDownloadProgressNotification(
-                            sessionId = sessionId,
-                            completed = completed,
-                            failed = failed,
-                            inProgress = running + enqueued,
-                            total = total
-                        )
+                        if (isFirmwareSession) {
+                            showUnifiedFirmwareDownloadProgressNotification(
+                                sessionId = sessionId,
+                                completed = completed,
+                                failed = failed,
+                                inProgress = running + enqueued,
+                                total = total
+                            )
+                        } else {
+                            showUnifiedDownloadProgressNotification(
+                                sessionId = sessionId,
+                                completed = completed,
+                                failed = failed,
+                                inProgress = running + enqueued,
+                                total = total
+                            )
+                        }
                     } else {
                         // All done
                         Log.d("DownloadManager", "Download session $sessionId completed: $completed success, $failed failed")
-                        showUnifiedDownloadCompleteNotification(
-                            sessionId = sessionId,
-                            completed = completed,
-                            failed = failed,
-                            total = total
-                        )
+                        if (isFirmwareSession) {
+                            showUnifiedFirmwareDownloadCompleteNotification(
+                                sessionId = sessionId,
+                                completed = completed,
+                                failed = failed,
+                                total = total
+                            )
+                        } else {
+                            showUnifiedDownloadCompleteNotification(
+                                sessionId = sessionId,
+                                completed = completed,
+                                failed = failed,
+                                total = total
+                            )
+                        }
                         
                         // Clean up individual notifications after a delay to let users see the summary
                         CoroutineScope(Dispatchers.IO).launch {
@@ -516,7 +537,7 @@ class DownloadManager @Inject constructor(
         // Start monitoring if not already started
         if (!monitoringJobs.containsKey(sessionId)) {
             Log.d("DownloadManager", "Starting monitoring for firmware session: $sessionId")
-            startMonitoringFirmwareDownload(sessionId)
+            startMonitoringDownload(sessionId)
         }
         
         Log.d("DownloadManager", "Successfully enqueued ${firmware.size} firmware download requests with session ID: $sessionId")
@@ -733,7 +754,12 @@ class DownloadManager @Inject constructor(
      * Clean up individual notifications for a completed unified download session
      */
     private fun cleanupIndividualNotifications(sessionId: String) {
+        Log.d("DownloadManager", "Starting cleanup for session: $sessionId")
+        Log.d("DownloadManager", "Current individualNotificationIds keys: ${individualNotificationIds.keys}")
+        
         val notificationIds = individualNotificationIds.remove(sessionId)
+        Log.d("DownloadManager", "Found ${notificationIds?.size ?: 0} notification IDs to clean up for session: $sessionId")
+        
         notificationIds?.forEach { id ->
             notificationManager.cancel(id)
             Log.d("DownloadManager", "Cleaned up individual notification ID: $id")
@@ -817,74 +843,6 @@ class DownloadManager @Inject constructor(
         notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
     }
     
-    private fun startMonitoringFirmwareDownload(sessionId: String) {
-        val job = CoroutineScope(Dispatchers.IO).launch {
-            Log.d("DownloadManager", "Starting monitoring for firmware session: $sessionId")
-            
-            while (currentDownloadTracker.containsKey(sessionId)) {
-                try {
-                    val tracker = currentDownloadTracker[sessionId] ?: break
-                    
-                    // Get work info for this session
-                    val workInfos = workManager.getWorkInfosByTag(sessionId).get()
-                    
-                    val completed = workInfos.count { it.state == WorkInfo.State.SUCCEEDED }
-                    val failed = workInfos.count { it.state == WorkInfo.State.FAILED || it.state == WorkInfo.State.CANCELLED }
-                    val running = workInfos.count { it.state == WorkInfo.State.RUNNING }
-                    val enqueued = workInfos.count { it.state == WorkInfo.State.ENQUEUED }
-                    val total = tracker.totalGames
-                    
-                    Log.d("DownloadManager", "Firmware session $sessionId progress: $completed completed, $failed failed, $running running, $enqueued enqueued out of $total")
-                    
-                    // Update notification
-                    if (completed + failed < total) {
-                        // Still in progress
-                        showUnifiedFirmwareDownloadProgressNotification(
-                            sessionId = sessionId,
-                            completed = completed,
-                            failed = failed,
-                            inProgress = running + enqueued,
-                            total = total
-                        )
-                    } else {
-                        // All done
-                        Log.d("DownloadManager", "Firmware download session $sessionId completed: $completed success, $failed failed")
-                        showUnifiedFirmwareDownloadCompleteNotification(
-                            sessionId = sessionId,
-                            completed = completed,
-                            failed = failed,
-                            total = total
-                        )
-                        
-                        // Clean up individual notifications after a delay to let users see the summary
-                        CoroutineScope(Dispatchers.IO).launch {
-                            delay(10000) // Wait 10 seconds
-                            cleanupIndividualNotifications(sessionId)
-                        }
-                        
-                        // Clean up tracker and reset current session if this was it
-                        currentDownloadTracker.remove(sessionId)
-                        if (currentDownloadSession == sessionId) {
-                            currentDownloadSession = null
-                        }
-                        break
-                    }
-                    
-                    // Check every 2 seconds
-                    delay(2000)
-                    
-                } catch (e: Exception) {
-                    Log.e("DownloadManager", "Error monitoring firmware download session $sessionId", e)
-                    break
-                }
-            }
-            
-            Log.d("DownloadManager", "Stopped monitoring firmware session: $sessionId")
-            monitoringJobs.remove(sessionId)
-        }
-        
-        monitoringJobs[sessionId] = job
-    }
     
     private fun showDownloadStartedNotification(message: String) {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -951,15 +909,16 @@ class DownloadManager @Inject constructor(
         const val UNIFIED_DOWNLOAD_GROUP = "unified_downloads"
         const val INDIVIDUAL_DOWNLOAD_GROUP = "individual_downloads"
         
+        @Volatile
+        private var INSTANCE: DownloadManager? = null
+        
         // Temporary workaround to get DownloadManager instance from workers
         fun getInstance(context: Context): DownloadManager? {
-            return try {
-                // Try to get the instance from Hilt
-                context.applicationContext as? android.app.Application
-                null // Let the worker handle notifications without DownloadManager
-            } catch (e: Exception) {
-                null
-            }
+            return INSTANCE
+        }
+        
+        fun setInstance(instance: DownloadManager) {
+            INSTANCE = instance
         }
     }
 }
