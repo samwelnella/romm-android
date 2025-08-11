@@ -416,15 +416,15 @@ class GameDownloadWorker @AssistedInject constructor(
                     var entry = zis.nextEntry
                     
                     while (entry != null) {
+                        val entryName = entry.name
+                        Log.d("GameDownloadWorker", "Processing ZIP entry: $entryName")
+                        
                         if (entry.isDirectory) {
-                            // Create directory
-                            val dirName = entry.name.trimEnd('/')
-                            destinationDir.findFile(dirName) ?: destinationDir.createDirectory(dirName)
-                            Log.d("GameDownloadWorker", "Created directory: $dirName")
+                            // Create directory structure
+                            createDirectoryStructure(destinationDir, entryName.trimEnd('/'))
                         } else {
-                            // Create file, overwriting if it exists
-                            val fileName = entry.name
-                            val outputFile = createOrReplaceFile(destinationDir, fileName)
+                            // Create file with proper directory structure
+                            val outputFile = createFileWithDirectories(destinationDir, entryName)
                             
                             outputFile?.let { file ->
                                 val outputStream = applicationContext.contentResolver.openOutputStream(file.uri)
@@ -440,7 +440,7 @@ class GameDownloadWorker @AssistedInject constructor(
                                         bufferedOutput.flush()
                                     }
                                 }
-                                Log.d("GameDownloadWorker", "Extracted file: $fileName")
+                                Log.d("GameDownloadWorker", "Extracted file: $entryName")
                             }
                         }
                         
@@ -454,5 +454,56 @@ class GameDownloadWorker @AssistedInject constructor(
         }
         
         Log.d("GameDownloadWorker", "Optimized ZIP extraction completed")
+    }
+    
+    /**
+     * Create directory structure recursively
+     */
+    private fun createDirectoryStructure(baseDir: DocumentFile, dirPath: String): DocumentFile? {
+        if (dirPath.isEmpty()) return baseDir
+        
+        val pathParts = dirPath.split('/')
+        var currentDir = baseDir
+        
+        for (part in pathParts) {
+            if (part.isNotEmpty()) {
+                val existingDir = currentDir.findFile(part)
+                currentDir = if (existingDir != null && existingDir.isDirectory) {
+                    existingDir
+                } else {
+                    currentDir.createDirectory(part) ?: return null
+                }
+                Log.d("GameDownloadWorker", "Created/found directory: $part (full path: ${currentDir.name})")
+            }
+        }
+        
+        return currentDir
+    }
+    
+    /**
+     * Create a file with proper directory structure
+     */
+    private fun createFileWithDirectories(baseDir: DocumentFile, filePath: String): DocumentFile? {
+        // Split the path into directory parts and filename
+        val pathParts = filePath.split('/')
+        if (pathParts.isEmpty()) return null
+        
+        val fileName = pathParts.last()
+        val dirPath = if (pathParts.size > 1) {
+            pathParts.dropLast(1).joinToString("/")
+        } else {
+            ""
+        }
+        
+        // Create directory structure if needed
+        val targetDir = if (dirPath.isEmpty()) {
+            baseDir
+        } else {
+            createDirectoryStructure(baseDir, dirPath) ?: return null
+        }
+        
+        // Create file in the correct directory
+        Log.d("GameDownloadWorker", "Creating file '$fileName' in directory: ${targetDir.name}")
+        return createOrReplaceFile(targetDir, fileName)
     }
 }
