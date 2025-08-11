@@ -296,9 +296,7 @@ class GameDownloadWorker @AssistedInject constructor(
             .setProgress(100, progress, progress == 0)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority as child notification
-            .setGroup(DownloadManager.UNIFIED_DOWNLOAD_GROUP) // Use same group as unified notifications
-            .setGroupSummary(false)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Normal priority as individual notification
             .setShowWhen(false)
             .setLocalOnly(true)
             .build()

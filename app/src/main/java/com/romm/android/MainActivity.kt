@@ -464,11 +464,11 @@ class MainViewModel @Inject constructor(
     }
     
     fun downloadMissingGames(platformId: Int?, collectionId: Int?) {
-        val missingGames = _uiState.value.games.filter { !it.missing_from_fs }
-        Log.d("MainViewModel", "Download missing games requested - ${missingGames.size} games missing")
+        val allGames = _uiState.value.games
+        Log.d("MainViewModel", "Download missing games requested - checking ${allGames.size} total games")
         viewModelScope.launch {
             try {
-                downloadManager.downloadAllGames(missingGames, _uiState.value.settings)
+                downloadManager.downloadMissingGames(allGames, _uiState.value.settings)
                 Log.d("MainViewModel", "Missing games download manager called successfully")
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Error starting missing games download", e)

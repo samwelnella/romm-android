@@ -3,8 +3,10 @@ package com.romm.android.utils
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.*
@@ -12,13 +14,14 @@ import com.romm.android.data.AppSettings
 import com.romm.android.data.Firmware
 import com.romm.android.data.Game
 import com.romm.android.network.RomMApiService
-import com.romm.android.workers.GameDownloadWorker
-import com.romm.android.workers.FirmwareDownloadWorker
+import com.romm.android.workers.UnifiedDownloadWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import android.util.Log
-import java.util.concurrent.ConcurrentHashMap
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,37 +33,61 @@ class DownloadManager @Inject constructor(
 ) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     
-    // Track all download progress - unified system for all download types
-    private var globalDownloadSession: GlobalDownloadSession? = null
+    // Download session management
+    private var currentSession: DownloadSession? = null
     private var monitoringJob: Job? = null
-    // Track individual download progress
-    private val individualDownloadProgress = ConcurrentHashMap<String, Int>()
-    private val individualDownloadStatus = ConcurrentHashMap<String, IndividualDownloadStatus>()
+    private val sessionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
-    data class GlobalDownloadSession(
-        val sessionId: String = "global_downloads_${System.currentTimeMillis()}",
-        var totalDownloads: Int = 0,
-        var completedDownloads: Int = 0,
-        var failedDownloads: Int = 0,
-        var cancelledDownloads: Int = 0,
-        val activeDownloads: MutableSet<String> = mutableSetOf(),
-        val allDownloadIds: MutableSet<String> = mutableSetOf()
+    // Atomic counters for thread-safe updates
+    private val completedCount = AtomicInteger(0)
+    private val failedCount = AtomicInteger(0)
+    private val cancelledCount = AtomicInteger(0)
+    
+    data class DownloadSession(
+        val sessionId: String = "download_session_${System.currentTimeMillis()}",
+        var totalDownloads: Int,
+        val maxConcurrentDownloads: Int,
+        val workIds: MutableSet<UUID> = mutableSetOf(),
+        var isCompleted: Boolean = false
     )
     
-    data class IndividualDownloadStatus(
-        val downloadId: String,
-        val displayName: String,
-        val workId: String,
-        var progress: Int = 0,
-        var isActive: Boolean = true,
-        var isCompleted: Boolean = false,
-        var isFailed: Boolean = false,
-        var isCancelled: Boolean = false
+    data class DownloadItem(
+        val id: String,
+        val name: String,
+        val type: DownloadType,
+        // Game-specific
+        val gameId: Int? = null,
+        val platformSlug: String? = null,
+        val isMulti: Boolean = false,
+        // Firmware-specific
+        val firmwareId: Int? = null,
+        val fileName: String? = null,
+        val platformId: Int? = null
     )
+    
+    enum class DownloadType {
+        GAME, FIRMWARE
+    }
+    
+    private val cancelReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_CANCEL_ALL) {
+                Log.d("DownloadManager", "Cancel all broadcast received")
+                cancelAllDownloads()
+            }
+        }
+    }
     
     init {
         createNotificationChannel()
-        setInstance(this)
+        
+        // Register cancel broadcast receiver
+        val filter = IntentFilter(ACTION_CANCEL_ALL)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(cancelReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(cancelReceiver, filter)
+        }
     }
     
     private fun createNotificationChannel() {
@@ -68,149 +95,457 @@ class DownloadManager @Inject constructor(
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Downloads",
-                NotificationManager.IMPORTANCE_DEFAULT // Use DEFAULT importance for proper grouping
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Game and firmware downloads"
-                setShowBadge(true) // Show badge on summary notification
-                enableLights(false) // Disable lights to avoid distraction
-                enableVibration(false) // Disable vibration to avoid noise
-                setSound(null, null) // No sound for quiet operation
+                setShowBadge(true)
+                enableLights(false)
+                enableVibration(false)
+                setSound(null, null)
             }
             notificationManager.createNotificationChannel(channel)
         }
     }
     
-    private fun startGlobalDownloadMonitoring() {
-        // Stop any existing monitoring
-        monitoringJob?.cancel()
+    /**
+     * Download a single game using foreground service
+     */
+    suspend fun downloadGame(game: Game, settings: AppSettings) {
+        if (settings.downloadDirectory.isEmpty()) {
+            Log.e("DownloadManager", "Download directory is empty!")
+            return
+        }
         
-        monitoringJob = CoroutineScope(Dispatchers.IO).launch {
-            Log.d("DownloadManager", "Starting global download monitoring")
-            
-            while (globalDownloadSession != null) {
-                try {
-                    val session = globalDownloadSession ?: break
-                    
-                    // Get work info for all downloads in the session
-                    val allWorkInfos = session.allDownloadIds.mapNotNull { downloadId ->
-                        val status = individualDownloadStatus[downloadId]
-                        if (status != null) {
-                            try {
-                                workManager.getWorkInfoById(UUID.fromString(status.workId)).get()
-                            } catch (e: Exception) {
-                                Log.w("DownloadManager", "Could not get work info for $downloadId", e)
-                                null
-                            }
-                        } else null
-                    }
-                    
-                    // Update individual download statuses
-                    session.allDownloadIds.forEach { downloadId ->
-                        val status = individualDownloadStatus[downloadId]
-                        val workInfo = allWorkInfos.find { it.id.toString() == status?.workId }
-                        
-                        if (status != null && workInfo != null) {
-                            val wasActive = status.isActive
-                            
-                            when (workInfo.state) {
-                                WorkInfo.State.SUCCEEDED -> {
-                                    if (wasActive) {
-                                        status.isCompleted = true
-                                        status.isActive = false
-                                        session.completedDownloads++
-                                        session.activeDownloads.remove(downloadId)
-                                        // Clear individual notification when completed
-                                        clearIndividualDownloadNotification(downloadId)
-                                    }
-                                }
-                                WorkInfo.State.FAILED -> {
-                                    if (wasActive) {
-                                        status.isFailed = true
-                                        status.isActive = false
-                                        session.failedDownloads++
-                                        session.activeDownloads.remove(downloadId)
-                                        // Clear individual notification when failed
-                                        clearIndividualDownloadNotification(downloadId)
-                                    }
-                                }
-                                WorkInfo.State.CANCELLED -> {
-                                    if (wasActive) {
-                                        status.isCancelled = true
-                                        status.isActive = false
-                                        session.cancelledDownloads++
-                                        session.activeDownloads.remove(downloadId)
-                                        // Clear individual notification when cancelled
-                                        clearIndividualDownloadNotification(downloadId)
-                                    }
-                                }
-                                WorkInfo.State.RUNNING -> {
-                                    // Update progress if available
-                                    val progress = workInfo.progress.getInt("progress", status.progress)
-                                    if (progress != status.progress && progress % 5 == 0) { // Update every 5%
-                                        status.progress = progress
-                                        updateIndividualDownloadNotification(downloadId, status)
-                                    }
-                                }
-                                else -> { /* ENQUEUED or other states - no action needed */ }
-                            }
-                        }
-                    }
-                    
-                    // Update summary notification
-                    val activeCount = session.activeDownloads.size
-                    val totalCompleted = session.completedDownloads + session.failedDownloads + session.cancelledDownloads
-                    
-                    if (activeCount > 0 || totalCompleted < session.totalDownloads) {
-                        // Still in progress
-                        showSummaryProgressNotification(session, activeCount)
-                    } else {
-                        // All downloads finished
-                        Log.d("DownloadManager", "All downloads finished: ${session.completedDownloads} completed, ${session.failedDownloads} failed, ${session.cancelledDownloads} cancelled")
-                        showSummaryCompleteNotification(session)
-                        
-                        // Keep the session but mark it as completed for potential new downloads
-                        break
-                    }
-                    
-                    // Check every 1 second for responsive progress updates
-                    delay(1000)
-                    
-                } catch (e: Exception) {
-                    Log.e("DownloadManager", "Error in global download monitoring", e)
-                    delay(2000) // Wait longer on error
-                }
-            }
-            
-            Log.d("DownloadManager", "Stopped global download monitoring")
+        val downloadItems = listOf(
+            DownloadItem(
+                id = "game_${game.id}",
+                name = game.name ?: game.fs_name,
+                type = DownloadType.GAME,
+                gameId = game.id,
+                platformSlug = game.platform_fs_slug,
+                isMulti = game.multi
+            )
+        )
+        
+        startDownloadSession(downloadItems, settings)
+    }
+    
+    /**
+     * Download multiple games in bulk using foreground services
+     */
+    suspend fun downloadAllGames(games: List<Game>, settings: AppSettings) {
+        if (settings.downloadDirectory.isEmpty()) {
+            Log.e("DownloadManager", "Download directory is empty!")
+            return
+        }
+        
+        if (games.isEmpty()) {
+            Log.w("DownloadManager", "No games to download")
+            return
+        }
+        
+        val downloadItems = games.map { game ->
+            DownloadItem(
+                id = "game_${game.id}",
+                name = game.name ?: game.fs_name,
+                type = DownloadType.GAME,
+                gameId = game.id,
+                platformSlug = game.platform_fs_slug,
+                isMulti = game.multi
+            )
+        }
+        
+        startDownloadSession(downloadItems, settings)
+    }
+    
+    /**
+     * Download multiple firmware files using foreground services
+     */
+    suspend fun downloadFirmware(firmware: List<Firmware>, settings: AppSettings) {
+        if (settings.downloadDirectory.isEmpty()) {
+            Log.e("DownloadManager", "Download directory is empty!")
+            return
+        }
+        
+        if (firmware.isEmpty()) {
+            Log.w("DownloadManager", "No firmware to download")
+            return
+        }
+        
+        val downloadItems = firmware.map { fw ->
+            DownloadItem(
+                id = "firmware_${fw.id}",
+                name = "Firmware: ${fw.file_name}",
+                type = DownloadType.FIRMWARE,
+                firmwareId = fw.id,
+                fileName = fw.file_name,
+                platformId = fw.platform_id
+            )
+        }
+        
+        startDownloadSession(downloadItems, settings)
+    }
+    
+    /**
+     * Download missing games - checks for file existence first
+     */
+    suspend fun downloadMissingGames(games: List<Game>, settings: AppSettings) {
+        if (settings.downloadDirectory.isEmpty()) {
+            Log.e("DownloadManager", "Download directory is empty!")
+            return
+        }
+        
+        val baseDir = DocumentFile.fromTreeUri(context, Uri.parse(settings.downloadDirectory))
+        if (baseDir == null) {
+            Log.e("DownloadManager", "Cannot access download directory")
+            return
+        }
+        
+        // Filter games that don't exist locally
+        val missingGames = games.filter { game ->
+            !gameExistsLocally(game, baseDir)
+        }
+        
+        Log.d("DownloadManager", "Found ${missingGames.size} missing games out of ${games.size} total")
+        
+        if (missingGames.isNotEmpty()) {
+            downloadAllGames(missingGames, settings)
         }
     }
     
     /**
-     * Show summary notification with progress bar and cancel button
+     * Check if a game already exists locally
      */
-    private fun showSummaryProgressNotification(session: GlobalDownloadSession, activeCount: Int) {
-        val completed = session.completedDownloads + session.failedDownloads + session.cancelledDownloads
+    private fun gameExistsLocally(game: Game, baseDir: DocumentFile): Boolean {
+        val platformDir = findPlatformDirectory(baseDir, game.platform_fs_slug)
+        if (platformDir == null) {
+            return false
+        }
+        
+        return if (game.multi) {
+            // Multi-disc games are stored in a directory
+            val gameDir = platformDir.findFile(game.fs_name_no_ext)
+            gameDir != null && gameDir.isDirectory
+        } else {
+            // Single file games
+            val gameFile = platformDir.findFile(game.fs_name)
+            gameFile != null && gameFile.isFile
+        }
+    }
+    
+    /**
+     * Find platform directory (handles numbered variants)
+     */
+    private fun findPlatformDirectory(baseDir: DocumentFile, platformSlug: String): DocumentFile? {
+        val files = baseDir.listFiles()
+        
+        // First pass: exact match
+        for (file in files) {
+            if (file.isDirectory && file.name == platformSlug) {
+                return file
+            }
+        }
+        
+        // Second pass: numbered variants like "snes (1)"
+        for (file in files) {
+            if (file.isDirectory) {
+                val name = file.name ?: continue
+                val regex = Regex("^${Regex.escape(platformSlug)}\\s*\\(\\d+\\)$")
+                if (regex.matches(name)) {
+                    return file
+                }
+            }
+        }
+        
+        return null
+    }
+    
+    /**
+     * Start a new download session or add to existing session
+     */
+    private suspend fun startDownloadSession(downloadItems: List<DownloadItem>, settings: AppSettings) {
+        val existingSession = currentSession
+        
+        if (existingSession != null && !existingSession.isCompleted) {
+            // Add to existing session
+            Log.d("DownloadManager", "Adding ${downloadItems.size} items to existing session: ${existingSession.sessionId}")
+            addItemsToExistingSession(downloadItems, settings, existingSession)
+        } else {
+            // Create new session
+            Log.d("DownloadManager", "Creating new download session: ${downloadItems.size} items, max concurrent: ${settings.maxConcurrentDownloads}")
+            createNewSession(downloadItems, settings)
+        }
+    }
+    
+    /**
+     * Add items to an existing download session
+     */
+    private suspend fun addItemsToExistingSession(
+        downloadItems: List<DownloadItem>, 
+        settings: AppSettings, 
+        session: DownloadSession
+    ) {
+        // Update session totals
+        session.totalDownloads += downloadItems.size
+        
+        // Create constraints for network connectivity
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        
+        // Create work requests with proper concurrency control
+        val workRequests = downloadItems.map { item ->
+            val workRequest = OneTimeWorkRequestBuilder<UnifiedDownloadWorker>()
+                .setInputData(createWorkData(item, settings))
+                .setConstraints(constraints)
+                .addTag(DOWNLOAD_TAG)
+                .addTag("session_${session.sessionId}")
+                .build()
+            
+            session.workIds.add(workRequest.id)
+            workRequest
+        }
+        
+        // Enqueue additional work with same concurrency control 
+        // For existing sessions, append to the existing chains
+        enqueueAdditionalWorkToExistingChains(workRequests, session.maxConcurrentDownloads, session.sessionId)
+        
+        // Update notification to show new totals
+        updateSummaryNotification()
+        
+        Log.d("DownloadManager", "Added ${downloadItems.size} items to session. New total: ${session.totalDownloads}")
+    }
+    
+    /**
+     * Create a completely new download session
+     */
+    private suspend fun createNewSession(downloadItems: List<DownloadItem>, settings: AppSettings) {
+        // Cancel any previous completed session
+        if (currentSession != null) {
+            cancelAllDownloads()
+        }
+        
+        // Reset counters
+        completedCount.set(0)
+        failedCount.set(0)
+        cancelledCount.set(0)
+        
+        // Create new session
+        currentSession = DownloadSession(
+            totalDownloads = downloadItems.size,
+            maxConcurrentDownloads = settings.maxConcurrentDownloads
+        )
+        
+        // Show initial summary notification
+        updateSummaryNotification()
+        
+        // Create constraints for network connectivity
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        
+        // Create work requests with proper concurrency control
+        val workRequests = downloadItems.map { item ->
+            val workRequest = OneTimeWorkRequestBuilder<UnifiedDownloadWorker>()
+                .setInputData(createWorkData(item, settings))
+                .setConstraints(constraints)
+                .addTag(DOWNLOAD_TAG)
+                .addTag("session_${currentSession!!.sessionId}")
+                .build()
+            
+            currentSession!!.workIds.add(workRequest.id)
+            workRequest
+        }
+        
+        // Enqueue work with concurrency control
+        enqueueWorkWithConcurrencyControl(workRequests, settings.maxConcurrentDownloads)
+        
+        // Start monitoring
+        startSessionMonitoring()
+    }
+    
+    /**
+     * Create work data for download items
+     */
+    private fun createWorkData(item: DownloadItem, settings: AppSettings): Data {
+        val builder = Data.Builder()
+            .putString("downloadId", item.id)
+            .putString("downloadName", item.name)
+            .putString("downloadType", item.type.name)
+            .putString("host", settings.host)
+            .putString("username", settings.username)
+            .putString("password", settings.password)
+            .putString("downloadDirectory", settings.downloadDirectory)
+            .putString("sessionId", currentSession!!.sessionId)
+        
+        when (item.type) {
+            DownloadType.GAME -> {
+                builder.putInt("gameId", item.gameId!!)
+                    .putString("platformSlug", item.platformSlug!!)
+                    .putBoolean("isMulti", item.isMulti)
+            }
+            DownloadType.FIRMWARE -> {
+                builder.putInt("firmwareId", item.firmwareId!!)
+                    .putString("fileName", item.fileName!!)
+                    .putInt("platformId", item.platformId!!)
+            }
+        }
+        
+        return builder.build()
+    }
+    
+    /**
+     * Enqueue work requests with proper concurrency control
+     */
+    private fun enqueueWorkWithConcurrencyControl(workRequests: List<OneTimeWorkRequest>, maxConcurrent: Int) {
+        Log.d("DownloadManager", "Enqueuing ${workRequests.size} downloads with max concurrent: $maxConcurrent")
+        
+        if (maxConcurrent == 1) {
+            // Sequential execution - chain all work requests
+            if (workRequests.isNotEmpty()) {
+                var continuation = workManager.beginWith(workRequests.first())
+                for (i in 1 until workRequests.size) {
+                    continuation = continuation.then(workRequests[i])
+                }
+                continuation.enqueue()
+                Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads sequentially")
+            }
+        } else {
+            // Limited concurrent execution using multiple chains
+            // Create exactly maxConcurrent chains and distribute work across them
+            for (i in workRequests.indices) {
+                val chainIndex = i % maxConcurrent
+                val chainName = "download_chain_${chainIndex}_${currentSession?.sessionId}"
+                
+                Log.d("DownloadManager", "Adding work ${i + 1}/${workRequests.size} to chain $chainIndex")
+                
+                workManager.beginUniqueWork(
+                    chainName,
+                    ExistingWorkPolicy.APPEND_OR_REPLACE,
+                    workRequests[i]
+                ).enqueue()
+            }
+            
+            Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads across $maxConcurrent chains")
+        }
+    }
+    
+    /**
+     * Add additional work to existing download chains
+     */
+    private fun enqueueAdditionalWorkToExistingChains(workRequests: List<OneTimeWorkRequest>, maxConcurrent: Int, sessionId: String) {
+        Log.d("DownloadManager", "Adding ${workRequests.size} downloads to existing chains with max concurrent: $maxConcurrent")
+        
+        if (maxConcurrent == 1) {
+            // Sequential execution - append to the single chain
+            val chainName = "download_chain_0_$sessionId"
+            for (workRequest in workRequests) {
+                workManager.beginUniqueWork(
+                    chainName,
+                    ExistingWorkPolicy.APPEND,
+                    workRequest
+                ).enqueue()
+            }
+            Log.d("DownloadManager", "Appended ${workRequests.size} downloads to sequential chain")
+        } else {
+            // Distribute across existing chains
+            for (i in workRequests.indices) {
+                val chainIndex = i % maxConcurrent
+                val chainName = "download_chain_${chainIndex}_$sessionId"
+                
+                Log.d("DownloadManager", "Appending work ${i + 1}/${workRequests.size} to existing chain $chainIndex")
+                
+                workManager.beginUniqueWork(
+                    chainName,
+                    ExistingWorkPolicy.APPEND,
+                    workRequests[i]
+                ).enqueue()
+            }
+            
+            Log.d("DownloadManager", "Appended ${workRequests.size} downloads to existing chains")
+        }
+    }
+    
+    /**
+     * Start monitoring the download session
+     */
+    private fun startSessionMonitoring() {
+        monitoringJob?.cancel()
+        monitoringJob = sessionScope.launch {
+            val session = currentSession ?: return@launch
+            
+            while (!session.isCompleted) {
+                try {
+                    val workInfos = workManager.getWorkInfosByTag("session_${session.sessionId}").get()
+                    
+                    var activeCount = 0
+                    var completedThisCheck = 0
+                    var failedThisCheck = 0
+                    var cancelledThisCheck = 0
+                    
+                    for (workInfo in workInfos) {
+                        when (workInfo.state) {
+                            WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED -> activeCount++
+                            WorkInfo.State.SUCCEEDED -> completedThisCheck++
+                            WorkInfo.State.FAILED -> failedThisCheck++
+                            WorkInfo.State.CANCELLED -> cancelledThisCheck++
+                            else -> {}
+                        }
+                    }
+                    
+                    // Update counters
+                    completedCount.set(completedThisCheck)
+                    failedCount.set(failedThisCheck)
+                    cancelledCount.set(cancelledThisCheck)
+                    
+                    // Update notification
+                    updateSummaryNotification()
+                    
+                    // Check if session is complete
+                    if (activeCount == 0 && (completedThisCheck + failedThisCheck + cancelledThisCheck) == session.totalDownloads) {
+                        session.isCompleted = true
+                        showFinalNotification()
+                        break
+                    }
+                    
+                    delay(1000) // Check every second
+                } catch (e: Exception) {
+                    Log.e("DownloadManager", "Error monitoring session", e)
+                    delay(2000)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Update the summary notification
+     */
+    private fun updateSummaryNotification() {
+        val session = currentSession ?: return
+        val completed = completedCount.get()
+        val failed = failedCount.get()
+        val cancelled = cancelledCount.get()
+        val active = session.totalDownloads - completed - failed - cancelled
+        
         val title = "Downloads"
-        val text = "$completed of ${session.totalDownloads} completed, $activeCount active downloads"
+        val text = "${completed + failed + cancelled} out of ${session.totalDownloads} completed, $active active downloads"
         
-        Log.d("DownloadManager", "Updating summary notification: $text")
-        
-        // Create cancel all intent
-        val cancelIntent = createCancelAllPendingIntent()
+        val cancelIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            Intent(ACTION_CANCEL_ALL),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
-            .setProgress(session.totalDownloads, completed, false)
+            .setProgress(session.totalDownloads, completed + failed + cancelled, false)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
-            .setSilent(false) // This notification can make sound
-            .setGroup(UNIFIED_DOWNLOAD_GROUP)
-            .setGroupSummary(true) // This is the summary notification
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+            .setOngoing(active > 0)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(false)
-            .setNumber(activeCount) // Show active count as badge
+            .setNumber(active)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel All", cancelIntent)
             .build()
         
@@ -218,30 +553,31 @@ class DownloadManager @Inject constructor(
     }
     
     /**
-     * Show summary notification when all downloads are complete
+     * Show final completion notification
      */
-    private fun showSummaryCompleteNotification(session: GlobalDownloadSession) {
-        val title = "Downloads Complete"
-        val parts = mutableListOf<String>()
+    private fun showFinalNotification() {
+        val session = currentSession ?: return
+        val completed = completedCount.get()
+        val failed = failedCount.get()
+        val cancelled = cancelledCount.get()
         
-        if (session.completedDownloads > 0) {
-            parts.add("${session.completedDownloads} completed")
+        val title = when {
+            failed == 0 && cancelled == 0 -> "All Downloads Complete!"
+            completed == 0 -> "Downloads Failed"
+            else -> "Downloads Complete"
         }
-        if (session.failedDownloads > 0) {
-            parts.add("${session.failedDownloads} failed")
-        }
-        if (session.cancelledDownloads > 0) {
-            parts.add("${session.cancelledDownloads} cancelled")
-        }
+        
+        val parts = mutableListOf<String>()
+        if (completed > 0) parts.add("$completed completed")
+        if (failed > 0) parts.add("$failed failed")
+        if (cancelled > 0) parts.add("$cancelled cancelled")
         
         val text = parts.joinToString(", ")
-        val icon = if (session.failedDownloads == 0 && session.cancelledDownloads == 0) {
+        val icon = if (failed == 0 && cancelled == 0) {
             android.R.drawable.stat_sys_download_done
         } else {
             android.R.drawable.stat_notify_error
         }
-        
-        Log.d("DownloadManager", "Final summary notification: $title - $text")
         
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
@@ -249,9 +585,6 @@ class DownloadManager @Inject constructor(
             .setSmallIcon(icon)
             .setAutoCancel(true)
             .setOngoing(false)
-            .setGroup(UNIFIED_DOWNLOAD_GROUP)
-            .setGroupSummary(true)
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setNumber(session.totalDownloads)
             .build()
@@ -260,640 +593,62 @@ class DownloadManager @Inject constructor(
     }
     
     /**
-     * Individual notifications are now handled by foreground service notifications from workers
+     * Cancel all active downloads
      */
-    private fun showIndividualDownloadNotification(downloadId: String, status: IndividualDownloadStatus) {
-        Log.d("DownloadManager", "Individual notification now handled by foreground service for: ${status.displayName} (progress: ${status.progress}%)")
-        // Individual notifications are now the foreground service notifications from the workers
-        // This eliminates duplicate notifications
-    }
-    
-    /**
-     * Update individual download notification progress
-     */
-    private fun updateIndividualDownloadNotification(downloadId: String, status: IndividualDownloadStatus) {
-        if (!status.isActive) return
-        
-        showIndividualDownloadNotification(downloadId, status)
-        Log.d("DownloadManager", "Updated individual notification for: ${status.displayName} (progress: ${status.progress}%)")
-    }
-    
-    /**
-     * Clear individual download notification when download finishes
-     */
-    private fun clearIndividualDownloadNotification(downloadId: String) {
-        val notificationId = downloadId.hashCode()
-        notificationManager.cancel(notificationId)
-        Log.d("DownloadManager", "Cleared individual notification for download: $downloadId (ID: $notificationId)")
-    }
-    
-    /**
-     * Create a PendingIntent that cancels all downloads when clicked
-     */
-    private fun createCancelAllPendingIntent(): PendingIntent {
-        val intent = Intent().apply {
-            action = "CANCEL_ALL_DOWNLOADS"
-        }
-        
-        return PendingIntent.getBroadcast(
-            context,
-            0,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-    }
-    
-    private fun showUnifiedDownloadProgressNotification(
-        sessionId: String,
-        completed: Int,
-        failed: Int,
-        inProgress: Int,
-        total: Int
-    ) {
-        val title = "Downloading Games"
-        val text = if (failed > 0) {
-            "Progress: $completed/$total completed, $failed failed, $inProgress in progress"
-        } else {
-            "Progress: $completed/$total completed, $inProgress in progress"
-        }
-        
-        Log.d("DownloadManager", "Updating unified notification: $text")
-        
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setProgress(total, completed, false)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
-            .setSilent(true) // Don't make noise for progress updates
-            .setGroup(UNIFIED_DOWNLOAD_GROUP)
-            .setGroupSummary(true) // This is the summary notification
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
-            .setAutoCancel(false) // Don't auto-cancel during progress
-            .setNumber(inProgress + completed) // Show count badge
-            .build()
-        
-        notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
-    }
-    
-    private fun showUnifiedDownloadCompleteNotification(
-        sessionId: String,
-        completed: Int,
-        failed: Int,
-        total: Int
-    ) {
-        val title = when {
-            failed == 0 -> "All Downloads Complete!"
-            completed == 0 -> "All Downloads Failed"
-            else -> "Downloads Complete"
-        }
-        
-        val text = when {
-            failed == 0 -> "Successfully downloaded $completed ${if (completed == 1) "game" else "games"}"
-            completed == 0 -> "Failed to download $failed ${if (failed == 1) "game" else "games"}"
-            else -> "Downloaded $completed ${if (completed == 1) "game" else "games"}, $failed failed"
-        }
-        
-        val icon = if (failed == 0) {
-            android.R.drawable.stat_sys_download_done
-        } else {
-            android.R.drawable.stat_notify_error
-        }
-        
-        Log.d("DownloadManager", "Final unified notification: $title - $text")
-        
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(icon)
-            .setAutoCancel(true)
-            .setOngoing(false) // Not ongoing anymore
-            .setGroup(UNIFIED_DOWNLOAD_GROUP)
-            .setGroupSummary(true) // This is the summary notification
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
-            .setNumber(total) // Show total count badge
-            .build()
-        
-        notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
-    }
-    
-    private fun getUnifiedNotificationId(sessionId: String): Int {
-        return sessionId.hashCode()
-    }
-    
-    /**
-     * Get or create global download session. This handles ALL downloads (single, bulk, firmware).
-     */
-    private fun getOrCreateGlobalSession(): GlobalDownloadSession {
-        val existingSession = globalDownloadSession
-        
-        if (existingSession != null) {
-            // Check if the current session is completed and we're starting new downloads
-            val allCompleted = existingSession.activeDownloads.isEmpty() && 
-                              (existingSession.completedDownloads + existingSession.failedDownloads + existingSession.cancelledDownloads) >= existingSession.totalDownloads
+    fun cancelAllDownloads() {
+        val session = currentSession
+        if (session != null) {
+            Log.d("DownloadManager", "Cancelling all downloads for session: ${session.sessionId}")
             
-            if (allCompleted && existingSession.totalDownloads > 0) {
-                Log.d("DownloadManager", "Previous session completed, transitioning to new downloads")
-                // Reset the session for new downloads while keeping the completed status visible
-                existingSession.totalDownloads = 0
-                existingSession.completedDownloads = 0
-                existingSession.failedDownloads = 0
-                existingSession.cancelledDownloads = 0
-                existingSession.activeDownloads.clear()
-                existingSession.allDownloadIds.clear()
-                
-                // Clear individual download tracking
-                individualDownloadStatus.clear()
-                individualDownloadProgress.clear()
+            // Cancel all work by tags
+            workManager.cancelAllWorkByTag("session_${session.sessionId}")
+            workManager.cancelAllWorkByTag(DOWNLOAD_TAG)
+            
+            // Cancel all chains for this session
+            for (i in 0 until session.maxConcurrentDownloads) {
+                val chainName = "download_chain_${i}_${session.sessionId}"
+                workManager.cancelUniqueWork(chainName)
             }
             
-            return existingSession
-        } else {
-            // Create new global session
-            val newSession = GlobalDownloadSession()
-            globalDownloadSession = newSession
-            Log.d("DownloadManager", "Created new global download session: ${newSession.sessionId}")
-            return newSession
-        }
-    }
-    
-    /**
-     * Add a download to the global session
-     */
-    private fun addDownloadToSession(gameName: String, workId: String): String {
-        val session = getOrCreateGlobalSession()
-        val downloadId = "download_${System.currentTimeMillis()}_${gameName.hashCode()}"
-        
-        // Add to session
-        session.totalDownloads++
-        session.activeDownloads.add(downloadId)
-        session.allDownloadIds.add(downloadId)
-        
-        // Track individual download
-        individualDownloadStatus[downloadId] = IndividualDownloadStatus(
-            downloadId = downloadId,
-            displayName = gameName,
-            workId = workId,
-            progress = 0,
-            isActive = true
-        )
-        
-        Log.d("DownloadManager", "Added download '$gameName' to session. Total downloads: ${session.totalDownloads}")
-        
-        // Start monitoring if this is the first download
-        if (session.totalDownloads == 1) {
-            startGlobalDownloadMonitoring()
+            // Mark session as completed
+            session.isCompleted = true
         }
         
-        // Show initial individual notification
-        showIndividualDownloadNotification(downloadId, individualDownloadStatus[downloadId]!!)
-        
-        return downloadId
-    }
-    
-    /**
-     * Legacy method signature - redirect to new unified session
-     */
-    private fun getOrCreateUnifiedSession(downloadType: String, isBulk: Boolean = false): String {
-        // This is now handled by the global session
-        val session = getOrCreateGlobalSession()
-        return session.sessionId
-    }
-    
-    
-    
-    suspend fun downloadGame(game: Game, settings: AppSettings) {
-        Log.d("DownloadManager", "Starting individual download for game: ${game.name ?: game.fs_name}")
-        
-        if (settings.downloadDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Download directory is empty!")
-            showErrorNotification("Download failed: No download directory selected")
-            return
-        }
-        
-        val gameName = game.name ?: game.fs_name
-        
-        val workRequest = OneTimeWorkRequestBuilder<GameDownloadWorker>()
-            .setInputData(
-                workDataOf(
-                    "gameId" to game.id,
-                    "gameName" to gameName,
-                    "platformSlug" to game.platform_fs_slug,
-                    "isMulti" to game.multi,
-                    "host" to settings.host,
-                    "username" to settings.username,
-                    "password" to settings.password,
-                    "downloadDirectory" to settings.downloadDirectory,
-                    "maxConcurrentDownloads" to settings.maxConcurrentDownloads,
-                    "isBulkDownload" to false
-                )
-            )
-            .addTag("download_work")
-            .addTag("global_download")
-            .addTag("game_${game.id}")
-            .build()
-        
-        // Add to global session and get download ID
-        val downloadId = addDownloadToSession(gameName, workRequest.id.toString())
-        
-        Log.d("DownloadManager", "Enqueuing individual download: $gameName (Work ID: ${workRequest.id}, Download ID: $downloadId)")
-        
-        // Enqueue with concurrency control
-        enqueueWithConcurrencyLimit(workRequest, settings.maxConcurrentDownloads)
-    }
-    
-    suspend fun downloadAllGames(games: List<Game>, settings: AppSettings) {
-        Log.d("DownloadManager", "Starting bulk download for ${games.size} games")
-        
-        if (settings.downloadDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Download directory is empty!")
-            showErrorNotification("Download failed: No download directory selected")
-            return
-        }
-        
-        if (games.isEmpty()) {
-            showErrorNotification("No games to download")
-            return
-        }
-        
-        // Set up constraints for network connectivity
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        
-        // Create work requests for all games
-        games.forEachIndexed { index, game ->
-            val gameName = game.name ?: game.fs_name
-            val workRequest = OneTimeWorkRequestBuilder<GameDownloadWorker>()
-                .setInputData(
-                    workDataOf(
-                        "gameId" to game.id,
-                        "gameName" to gameName,
-                        "platformSlug" to game.platform_fs_slug,
-                        "isMulti" to game.multi,
-                        "host" to settings.host,
-                        "username" to settings.username,
-                        "password" to settings.password,
-                        "downloadDirectory" to settings.downloadDirectory,
-                        "maxConcurrentDownloads" to settings.maxConcurrentDownloads,
-                        "isBulkDownload" to true,
-                        "totalGames" to games.size,
-                        "gameIndex" to index
-                    )
-                )
-                .setConstraints(constraints)
-                .addTag("download_work")
-                .addTag("global_download")
-                .addTag("game_${game.id}")
-                .build()
-            
-            // Add to global session
-            val downloadId = addDownloadToSession(gameName, workRequest.id.toString())
-            
-            Log.d("DownloadManager", "Enqueuing game ${index + 1}/${games.size}: $gameName (Work ID: ${workRequest.id}, Download ID: $downloadId)")
-            
-            // Use a queue-based approach to respect maxConcurrentDownloads
-            enqueueWithConcurrencyLimit(workRequest, settings.maxConcurrentDownloads)
-        }
-        
-        Log.d("DownloadManager", "Successfully enqueued ${games.size} download requests")
-    }
-    
-    suspend fun downloadFirmware(firmware: List<Firmware>, settings: AppSettings) {
-        Log.d("DownloadManager", "Starting firmware download for ${firmware.size} files")
-        
-        if (settings.downloadDirectory.isEmpty()) {
-            showErrorNotification("Download failed: No download directory selected")
-            return
-        }
-        
-        if (firmware.isEmpty()) {
-            showErrorNotification("No firmware to download")
-            return
-        }
-        
-        // Set up constraints
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        
-        firmware.forEachIndexed { index, fw ->
-            val workRequest = OneTimeWorkRequestBuilder<FirmwareDownloadWorker>()
-                .setInputData(
-                    workDataOf(
-                        "firmwareId" to fw.id,
-                        "fileName" to fw.file_name,
-                        "platformId" to fw.platform_id,
-                        "host" to settings.host,
-                        "username" to settings.username,
-                        "password" to settings.password,
-                        "downloadDirectory" to settings.downloadDirectory,
-                        "isBulkDownload" to true,
-                        "totalFiles" to firmware.size,
-                        "fileIndex" to index
-                    )
-                )
-                .setConstraints(constraints)
-                .addTag("firmware_download")
-                .addTag("global_download")
-                .addTag("firmware_${fw.id}")
-                .build()
-            
-            // Add to global session
-            val downloadId = addDownloadToSession("Firmware: ${fw.file_name}", workRequest.id.toString())
-            
-            Log.d("DownloadManager", "Enqueuing firmware ${index + 1}/${firmware.size}: ${fw.file_name} (Work ID: ${workRequest.id}, Download ID: $downloadId)")
-            
-            // Use unique names for firmware downloads
-            val uniqueWorkName = "download_firmware_${fw.id}_${System.currentTimeMillis()}"
-            workManager.enqueueUniqueWork(
-                uniqueWorkName,
-                ExistingWorkPolicy.REPLACE,
-                workRequest
-            )
-        }
-        
-        Log.d("DownloadManager", "Successfully enqueued ${firmware.size} firmware download requests")
-    }
-    
-    fun cancelAllDownloads() {
-        Log.d("DownloadManager", "Cancelling all downloads")
-        workManager.cancelAllWorkByTag("global_download")
-        workManager.cancelAllWorkByTag("firmware_download")
-        
-        // Stop monitoring job
+        // Cancel monitoring
         monitoringJob?.cancel()
         monitoringJob = null
         
-        // Clear session and notifications
-        globalDownloadSession?.let { session ->
-            notificationManager.cancel(SUMMARY_NOTIFICATION_ID)
-            
-            // Individual foreground service notifications will be automatically 
-            // cleared when the workers are cancelled
-        }
-        
-        // Reset session and tracking
-        globalDownloadSession = null
-        individualDownloadStatus.clear()
-        individualDownloadProgress.clear()
-    }
-    
-    suspend fun getDownloadStatus(): List<WorkInfo> {
-        return workManager.getWorkInfosByTag("global_download").get()
-    }
-    
-    /**
-     * Clear any existing unified download notifications
-     */
-    private fun clearUnifiedDownloadNotifications() {
-        Log.d("DownloadManager", "Clearing existing unified download notifications")
-        
-        // Cancel summary notification
+        // Clear notification
         notificationManager.cancel(SUMMARY_NOTIFICATION_ID)
         
-        // Individual foreground service notifications will be automatically 
-        // cleared when downloads complete or are cancelled
+        // Clear session
+        currentSession = null
         
-        // Stop monitoring job
-        monitoringJob?.cancel()
-        monitoringJob = null
-        
-        // Clear tracking
-        globalDownloadSession = null
-        individualDownloadStatus.clear()
-        individualDownloadProgress.clear()
-        
-        Log.d("DownloadManager", "Cleared all existing unified download notifications")
+        Log.d("DownloadManager", "All downloads cancelled")
     }
     
     /**
-     * Legacy methods - these are called by the worker classes but now handled by the global session
-     * The workers should eventually be updated to use progress callbacks instead
+     * Get current download status
      */
-    fun showIndividualDownloadNotification(gameName: String, isSuccess: Boolean, sessionId: String? = null) {
-        Log.d("DownloadManager", "Legacy individual notification call for: $gameName (success: $isSuccess) - handled by global session")
-        // This is now handled by the global monitoring system
+    suspend fun getDownloadStatus(): List<WorkInfo> {
+        return currentSession?.let { session ->
+            workManager.getWorkInfosByTag("session_${session.sessionId}").get()
+        } ?: emptyList()
     }
     
-    fun showIndividualFirmwareDownloadNotification(fileName: String, isSuccess: Boolean, sessionId: String? = null) {
-        Log.d("DownloadManager", "Legacy firmware notification call for: $fileName (success: $isSuccess) - handled by global session")
-        // This is now handled by the global monitoring system
-    }
-    
-    /**
-     * Legacy method - now handled by global monitoring
-     */
-    private fun ensureSummaryNotificationExists(sessionId: String) {
-        Log.d("DownloadManager", "Legacy ensureSummaryNotificationExists call - handled by global monitoring")
-        // This is now handled by the global monitoring system
-    }
-    
-    /**
-     * Legacy method - now handled by global monitoring
-     */
-    private fun ensureGroupSummaryNotificationExists(sessionId: String) {
-        Log.d("DownloadManager", "Legacy ensureGroupSummaryNotificationExists call - handled by global monitoring")
-        // This is now handled by the global monitoring system
-    }
-    
-    /**
-     * Legacy placeholder method - now handled by global monitoring
-     */
-    private fun showIndividualDownloadPlaceholder(gameName: String, sessionId: String) {
-        Log.d("DownloadManager", "Legacy placeholder notification call for: $gameName - handled by global monitoring")
-        // This is now handled by the global monitoring system
-    }
-    
-    /**
-     * Clean up individual notifications for a completed unified download session
-     */
-    private fun cleanupIndividualNotifications(sessionId: String) {
-        Log.d("DownloadManager", "Starting cleanup for session: $sessionId")
-        
-        // Clean up all individual notifications for the global session
-        globalDownloadSession?.allDownloadIds?.forEach { downloadId ->
-            val notificationId = downloadId.hashCode()
-            notificationManager.cancel(notificationId)
-            Log.d("DownloadManager", "Cleaned up individual notification ID: $notificationId")
+    fun cleanup() {
+        try {
+            context.unregisterReceiver(cancelReceiver)
+        } catch (e: Exception) {
+            Log.w("DownloadManager", "Error unregistering receiver", e)
         }
-        
-        Log.d("DownloadManager", "Cleaned up individual notifications for session: $sessionId")
-    }
-    
-    private fun showUnifiedFirmwareDownloadProgressNotification(
-        sessionId: String,
-        completed: Int,
-        failed: Int,
-        inProgress: Int,
-        total: Int
-    ) {
-        val title = "Downloading Firmware"
-        val text = if (failed > 0) {
-            "Progress: $completed/$total completed, $failed failed, $inProgress in progress"
-        } else {
-            "Progress: $completed/$total completed, $inProgress in progress"
-        }
-        
-        Log.d("DownloadManager", "Updating unified firmware notification: $text")
-        
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setProgress(total, completed, false)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
-            .setSilent(true) // Don't make noise for progress updates
-            .setGroup(UNIFIED_DOWNLOAD_GROUP)
-            .setGroupSummary(true) // This is the summary notification
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
-            .setAutoCancel(false) // Don't auto-cancel during progress
-            .setNumber(inProgress + completed) // Show count badge
-            .build()
-        
-        notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
-    }
-    
-    private fun showUnifiedFirmwareDownloadCompleteNotification(
-        sessionId: String,
-        completed: Int,
-        failed: Int,
-        total: Int
-    ) {
-        val title = when {
-            failed == 0 -> "All Firmware Downloads Complete!"
-            completed == 0 -> "All Firmware Downloads Failed"
-            else -> "Firmware Downloads Complete"
-        }
-        
-        val text = when {
-            failed == 0 -> "Successfully downloaded $completed firmware ${if (completed == 1) "file" else "files"}"
-            completed == 0 -> "Failed to download $failed firmware ${if (failed == 1) "file" else "files"}"
-            else -> "Downloaded $completed firmware ${if (completed == 1) "file" else "files"}, $failed failed"
-        }
-        
-        val icon = if (failed == 0) {
-            android.R.drawable.stat_sys_download_done
-        } else {
-            android.R.drawable.stat_notify_error
-        }
-        
-        Log.d("DownloadManager", "Final unified firmware notification: $title - $text")
-        
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(icon)
-            .setAutoCancel(true)
-            .setOngoing(false) // Not ongoing anymore
-            .setGroup(UNIFIED_DOWNLOAD_GROUP)
-            .setGroupSummary(true) // This is the summary notification
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY) // Only this notification alerts
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Higher priority than children to ensure it appears first
-            .setNumber(total) // Show total count badge
-            .build()
-        
-        notificationManager.notify(getUnifiedNotificationId(sessionId), notification)
-    }
-    
-    
-    private fun showDownloadStartedNotification(message: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("Download Started")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setAutoCancel(true)
-            .setGroup(INDIVIDUAL_DOWNLOAD_GROUP) // Use different group to avoid conflicts
-            .build()
-        
-        notificationManager.notify(STARTED_NOTIFICATION_ID, notification)
-    }
-    
-    private fun showErrorNotification(message: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("Download Error")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setAutoCancel(true)
-            .build()
-        
-        notificationManager.notify(ERROR_NOTIFICATION_ID, notification)
-    }
-    
-    /**
-     * Enqueue work requests with proper concurrency control
-     */
-    private fun enqueueWithConcurrencyLimit(workRequest: OneTimeWorkRequest, maxConcurrentDownloads: Int) {
-        Log.d("DownloadManager", "Enqueuing download with max concurrent limit: $maxConcurrentDownloads")
-        
-        val uniqueName = "download_${workRequest.id}"
-        
-        if (maxConcurrentDownloads == 1) {
-            // Sequential downloads - use a single sequential chain
-            Log.d("DownloadManager", "Enqueuing to sequential download chain")
-            workManager.beginUniqueWork(
-                "sequential_downloads",
-                ExistingWorkPolicy.APPEND,
-                workRequest
-            ).enqueue()
-        } else {
-            // Limited concurrent downloads - use a simple chain approach
-            Log.d("DownloadManager", "Enqueuing with concurrency limit: $maxConcurrentDownloads")
-            
-            // Use a round-robin approach with fixed chains
-            // This ensures we never exceed the concurrency limit
-            val chainIndex = System.currentTimeMillis() % maxConcurrentDownloads
-            val chainName = "concurrent_chain_$chainIndex"
-            
-            Log.d("DownloadManager", "Using chain: $chainName (max concurrent: $maxConcurrentDownloads)")
-            
-            workManager.beginUniqueWork(
-                chainName,
-                ExistingWorkPolicy.APPEND,
-                workRequest
-            ).enqueue()
-        }
+        sessionScope.cancel()
     }
     
     companion object {
         const val CHANNEL_ID = "download_channel"
-        const val STARTED_NOTIFICATION_ID = 1001
-        const val ERROR_NOTIFICATION_ID = 1002
-        const val UNIFIED_DOWNLOAD_GROUP = "romm_download_group"
         const val SUMMARY_NOTIFICATION_ID = 999999
-        const val INDIVIDUAL_DOWNLOAD_GROUP = "individual_downloads"
-        
-        @Volatile
-        private var INSTANCE: DownloadManager? = null
-        
-        // Temporary workaround to get DownloadManager instance from workers
-        fun getInstance(context: Context): DownloadManager? {
-            return INSTANCE
-        }
-        
-        fun setInstance(instance: DownloadManager) {
-            INSTANCE = instance
-        }
-    }
-}
-
-object ErrorHandler {
-    fun getErrorMessage(throwable: Throwable): String {
-        return when (throwable) {
-            is java.net.ConnectException -> "Cannot connect to RomM server. Check your connection settings."
-            is java.net.UnknownHostException -> "Cannot resolve hostname. Check your server address."
-            is retrofit2.HttpException -> {
-                when (throwable.code()) {
-                    401 -> "Authentication failed. Check your username and password."
-                    404 -> "Resource not found."
-                    500 -> "Server error occurred."
-                    else -> "HTTP error: ${throwable.code()}"
-                }
-            }
-            else -> throwable.message ?: "An unknown error occurred"
-        }
+        const val DOWNLOAD_TAG = "unified_download"
+        const val ACTION_CANCEL_ALL = "com.romm.android.ACTION_CANCEL_ALL_DOWNLOADS"
     }
 }
