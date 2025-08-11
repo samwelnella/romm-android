@@ -36,7 +36,7 @@ fun PlatformListScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             "Collections",
                             style = MaterialTheme.typography.titleMedium

@@ -72,39 +72,36 @@ fun CollectionCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     collection.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
+                    style = MaterialTheme.typography.titleMedium
                 )
-                Icon(
-                    Icons.Filled.ArrowForward,
-                    contentDescription = null
-                )
-            }
-            
-            if (collection.description.isNotEmpty()) {
+                
+                if (collection.description.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        collection.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    collection.description,
+                    "${collection.rom_count} games",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "${collection.rom_count} games",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            Icon(
+                Icons.Filled.ArrowForward,
+                contentDescription = null
             )
         }
     }
