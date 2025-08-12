@@ -493,10 +493,15 @@ class DownloadManager @Inject constructor(
         val completed = completedCount.get()
         val failed = failedCount.get()
         val cancelled = cancelledCount.get()
-        val active = session.totalDownloads - completed - failed - cancelled
+        val totalProcessed = completed + failed + cancelled
+        val remaining = session.totalDownloads - totalProcessed
+        
+        // Active downloads = downloads that have acquired semaphore permits and are actually downloading
+        // This will be limited by the maxConcurrentDownloads setting
+        val activeDownloads = minOf(remaining, session.maxConcurrentDownloads)
         
         val title = "Downloads"
-        val text = "${completed + failed + cancelled} out of ${session.totalDownloads} completed, $active active downloads"
+        val text = "$totalProcessed out of ${session.totalDownloads} completed, $activeDownloads active downloads"
         
         val cancelIntent = PendingIntent.getBroadcast(
             context,
@@ -508,12 +513,12 @@ class DownloadManager @Inject constructor(
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
-            .setProgress(session.totalDownloads, completed + failed + cancelled, false)
+            .setProgress(session.totalDownloads, totalProcessed, false)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(active > 0)
+            .setOngoing(activeDownloads > 0)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(false)
-            .setNumber(active)
+            .setNumber(activeDownloads)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel All", cancelIntent)
             .build()
         
