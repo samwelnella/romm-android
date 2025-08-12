@@ -18,6 +18,24 @@ A modern Android app for browsing and downloading ROMs from your RomM server ins
 - 🗂️ Organized file structure ([DOWNLOAD_DIR]/[PLATFORM_SLUG])
 - 🎯 **Game controller navigation** support
 
+## Screenshots
+
+<div align="center">
+
+### Platform View
+![Platform View](.screenshots/platform_view.png)
+
+### Game List View
+![Platform Game List View](.screenshots/platform_gamelist_view.png)
+
+### Game Details with Cover Art
+![Game Details View](.screenshots/game_details_view.png)
+
+### Bulk Download Menu
+![Bulk Download Menu](.screenshots/bulk_download_games_firmware_menu.png)
+
+</div>
+
 ## Setup
 
 1. Open Android Studio
