@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -77,8 +78,22 @@ class MainActivity : ComponentActivity() {
 fun RomMApp(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     
+    // Create scroll states for different screens
+    val platformListState = rememberLazyListState()
+    val collectionListState = rememberLazyListState()
+    val gameListStates = remember { mutableMapOf<String, androidx.compose.foundation.lazy.LazyListState>() }
+    
     // Handle Android system back gesture
     BackHandler(enabled = uiState.screenHistory.isNotEmpty()) {
+        // Save current scroll state before going back
+        val currentScrollKey = uiState.currentScreen.getScrollKey()
+        val currentScrollPosition = when (uiState.currentScreen) {
+            is Screen.PlatformList -> platformListState.firstVisibleItemIndex
+            is Screen.CollectionList -> collectionListState.firstVisibleItemIndex
+            is Screen.GameList -> gameListStates[currentScrollKey]?.firstVisibleItemIndex ?: 0
+            else -> 0
+        }
+        viewModel.saveScrollState(currentScrollKey, currentScrollPosition)
         viewModel.goBack()
     }
     
@@ -117,34 +132,113 @@ fun RomMApp(viewModel: MainViewModel) {
                     )
                 }
                 is Screen.PlatformList -> {
+                    // Handle scroll position restoration for back navigation
+                    LaunchedEffect(uiState.isNavigatingBack) {
+                        if (uiState.isNavigatingBack) {
+                            val savedPosition = viewModel.getScrollState(screen.getScrollKey())
+                            if (savedPosition > 0) {
+                                platformListState.scrollToItem(savedPosition)
+                            }
+                            viewModel.resetNavigationFlag()
+                        }
+                    }
+                    
+                    // Handle scroll position reset for forward navigation (new screen entry)
+                    LaunchedEffect(screen) {
+                        if (!uiState.isNavigatingBack) {
+                            platformListState.scrollToItem(0)
+                        }
+                    }
+                    
                     PlatformListScreen(
                         platforms = uiState.platforms,
                         isLoading = uiState.isLoading,
-                        onPlatformClick = viewModel::selectPlatform,
-                        onCollectionsClick = viewModel::showCollections,
-                        onRefresh = viewModel::refreshData
+                        onPlatformClick = { platform ->
+                            // Save scroll state before navigating
+                            viewModel.saveScrollState(screen.getScrollKey(), platformListState.firstVisibleItemIndex)
+                            viewModel.selectPlatform(platform)
+                        },
+                        onCollectionsClick = {
+                            // Save scroll state before navigating
+                            viewModel.saveScrollState(screen.getScrollKey(), platformListState.firstVisibleItemIndex)
+                            viewModel.showCollections()
+                        },
+                        onRefresh = viewModel::refreshData,
+                        lazyListState = platformListState
                     )
                 }
                 is Screen.CollectionList -> {
+                    // Handle scroll position restoration for back navigation
+                    LaunchedEffect(uiState.isNavigatingBack) {
+                        if (uiState.isNavigatingBack) {
+                            val savedPosition = viewModel.getScrollState(screen.getScrollKey())
+                            if (savedPosition > 0) {
+                                collectionListState.scrollToItem(savedPosition)
+                            }
+                            viewModel.resetNavigationFlag()
+                        }
+                    }
+                    
+                    // Handle scroll position reset for forward navigation (new screen entry)
+                    LaunchedEffect(screen) {
+                        if (!uiState.isNavigatingBack) {
+                            collectionListState.scrollToItem(0)
+                        }
+                    }
+                    
                     CollectionListScreen(
                         collections = uiState.collections,
                         isLoading = uiState.isLoading,
-                        onCollectionClick = viewModel::selectCollection,
+                        onCollectionClick = { collection ->
+                            // Save scroll state before navigating
+                            viewModel.saveScrollState(screen.getScrollKey(), collectionListState.firstVisibleItemIndex)
+                            viewModel.selectCollection(collection)
+                        },
                         onBack = viewModel::goBack,
-                        onRefresh = viewModel::refreshData
+                        onRefresh = viewModel::refreshData,
+                        lazyListState = collectionListState
                     )
                 }
                 is Screen.GameList -> {
+                    // Get or create scroll state for this specific game list
+                    val scrollKey = screen.getScrollKey()
+                    val gameListState = gameListStates.getOrPut(scrollKey) { 
+                        androidx.compose.foundation.lazy.LazyListState()
+                    }
+                    
+                    // Handle scroll position restoration for back navigation
+                    LaunchedEffect(uiState.isNavigatingBack) {
+                        if (uiState.isNavigatingBack) {
+                            val savedPosition = viewModel.getScrollState(scrollKey)
+                            if (savedPosition > 0) {
+                                gameListState.scrollToItem(savedPosition)
+                            }
+                            viewModel.resetNavigationFlag()
+                        }
+                    }
+                    
+                    // Handle scroll position reset for forward navigation (new screen entry)
+                    LaunchedEffect(screen) {
+                        if (!uiState.isNavigatingBack) {
+                            gameListState.scrollToItem(0)
+                        }
+                    }
+                    
                     GameListScreen(
                         games = uiState.games,
                         isLoading = uiState.isLoading,
                         title = screen.title,
-                        onGameClick = viewModel::selectGame,
+                        onGameClick = { game ->
+                            // Save scroll state before navigating
+                            viewModel.saveScrollState(scrollKey, gameListState.firstVisibleItemIndex)
+                            viewModel.selectGame(game)
+                        },
                         onDownloadAll = { viewModel.downloadAllGames(screen.platformId, screen.collectionId) },
                         onDownloadMissing = { viewModel.downloadMissingGames(screen.platformId, screen.collectionId) },
                         onDownloadFirmware = screen.platformId?.let { { viewModel.downloadFirmware(it) } },
                         onBack = viewModel::goBack,
-                        onRefresh = { viewModel.refreshGames(screen.platformId, screen.collectionId) }
+                        onRefresh = { viewModel.refreshGames(screen.platformId, screen.collectionId) },
+                        lazyListState = gameListState
                     )
                 }
                 is Screen.GameDetails -> {
@@ -185,6 +279,8 @@ data class UiState(
     val collections: List<com.romm.android.data.Collection> = emptyList(), // Fully qualified name
     val games: List<Game> = emptyList(),
     val cachedGames: Map<String, List<Game>> = emptyMap(), // Cache games by platformId or collectionId
+    val scrollStates: Map<String, Int> = emptyMap(), // Cache scroll positions by screen key
+    val isNavigatingBack: Boolean = false, // Track if we're navigating back vs forward
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
@@ -201,6 +297,21 @@ sealed class Screen {
         val collectionId: Int? = null
     ) : Screen()
     data class GameDetails(val game: Game) : Screen()
+    
+    // Generate unique keys for scroll state caching
+    fun getScrollKey(): String {
+        return when (this) {
+            is Settings -> "settings"
+            is PlatformList -> "platform_list"
+            is CollectionList -> "collection_list"
+            is GameList -> when {
+                platformId != null -> "game_list_platform_$platformId"
+                collectionId != null -> "game_list_collection_$collectionId"
+                else -> "game_list_unknown"
+            }
+            is GameDetails -> "game_details_${game.id}"
+        }
+    }
 }
 
 // MainViewModel.kt
@@ -262,9 +373,39 @@ class MainViewModel @Inject constructor(
     private fun navigateToScreen(newScreen: Screen) {
         val currentState = _uiState.value
         val newHistory = currentState.screenHistory + currentState.currentScreen
+        
+        // Clear scroll state for the new screen since we're navigating forward
+        clearScrollState(newScreen.getScrollKey())
+        
         _uiState.value = currentState.copy(
             currentScreen = newScreen,
-            screenHistory = newHistory
+            screenHistory = newHistory,
+            isNavigatingBack = false // Forward navigation
+        )
+    }
+    
+    fun saveScrollState(screenKey: String, scrollPosition: Int) {
+        val currentState = _uiState.value
+        _uiState.value = currentState.copy(
+            scrollStates = currentState.scrollStates + (screenKey to scrollPosition)
+        )
+    }
+    
+    fun getScrollState(screenKey: String): Int {
+        return _uiState.value.scrollStates[screenKey] ?: 0
+    }
+    
+    fun clearScrollState(screenKey: String) {
+        val currentState = _uiState.value
+        _uiState.value = currentState.copy(
+            scrollStates = currentState.scrollStates - screenKey
+        )
+    }
+    
+    fun resetNavigationFlag() {
+        val currentState = _uiState.value
+        _uiState.value = currentState.copy(
+            isNavigatingBack = false
         )
     }
     
@@ -290,7 +431,8 @@ class MainViewModel @Inject constructor(
             _uiState.value = currentState.copy(
                 currentScreen = previousScreen,
                 screenHistory = newHistory,
-                games = cachedGames ?: currentState.games // Use cached games if available
+                games = cachedGames ?: currentState.games, // Use cached games if available
+                isNavigatingBack = true // Mark as back navigation
             )
             
             // Only reload if we don't have cached data
@@ -304,7 +446,10 @@ class MainViewModel @Inject constructor(
             }
         } else {
             // No history, go to platform list
-            _uiState.value = currentState.copy(currentScreen = Screen.PlatformList)
+            _uiState.value = currentState.copy(
+                currentScreen = Screen.PlatformList,
+                isNavigatingBack = true
+            )
         }
     }
     

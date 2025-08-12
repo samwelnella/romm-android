@@ -2,7 +2,9 @@ package com.romm.android.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
@@ -19,9 +21,11 @@ fun PlatformListScreen(
     isLoading: Boolean,
     onPlatformClick: (Platform) -> Unit,
     onCollectionsClick: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    lazyListState: LazyListState = rememberLazyListState()
 ) {
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
