@@ -377,6 +377,7 @@ class DownloadManager @Inject constructor(
             .putString("password", settings.password)
             .putString("downloadDirectory", settings.downloadDirectory)
             .putString("sessionId", currentSession!!.sessionId)
+            .putInt("maxConcurrentDownloads", settings.maxConcurrentDownloads)
         
         when (item.type) {
             DownloadType.GAME -> {
@@ -401,7 +402,7 @@ class DownloadManager @Inject constructor(
         Log.d("DownloadManager", "Enqueuing ${workRequests.size} downloads with max concurrent: $maxConcurrent")
         
         if (maxConcurrent == 1) {
-            // Sequential execution - chain all work requests
+            // Sequential execution - chain all work requests one after another
             if (workRequests.isNotEmpty()) {
                 var continuation = workManager.beginWith(workRequests.first())
                 for (i in 1 until workRequests.size) {
@@ -411,59 +412,24 @@ class DownloadManager @Inject constructor(
                 Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads sequentially")
             }
         } else {
-            // Limited concurrent execution using multiple chains
-            // Create exactly maxConcurrent chains and distribute work across them
-            for (i in workRequests.indices) {
-                val chainIndex = i % maxConcurrent
-                val chainName = "download_chain_${chainIndex}_${currentSession?.sessionId}"
-                
-                Log.d("DownloadManager", "Adding work ${i + 1}/${workRequests.size} to chain $chainIndex")
-                
-                workManager.beginUniqueWork(
-                    chainName,
-                    ExistingWorkPolicy.APPEND_OR_REPLACE,
-                    workRequests[i]
-                ).enqueue()
-            }
-            
-            Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads across $maxConcurrent chains")
+            // Concurrent execution - just enqueue all requests directly
+            // WorkManager will run them concurrently up to system limits
+            // We'll control concurrency in the worker itself
+            workManager.enqueue(workRequests)
+            Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads for concurrent execution (max: $maxConcurrent)")
         }
     }
     
     /**
-     * Add additional work to existing download chains
+     * Add additional work to existing session
      */
     private fun enqueueAdditionalWorkToExistingChains(workRequests: List<OneTimeWorkRequest>, maxConcurrent: Int, sessionId: String) {
-        Log.d("DownloadManager", "Adding ${workRequests.size} downloads to existing chains with max concurrent: $maxConcurrent")
+        Log.d("DownloadManager", "Adding ${workRequests.size} downloads to existing session with max concurrent: $maxConcurrent")
         
-        if (maxConcurrent == 1) {
-            // Sequential execution - append to the single chain
-            val chainName = "download_chain_0_$sessionId"
-            for (workRequest in workRequests) {
-                workManager.beginUniqueWork(
-                    chainName,
-                    ExistingWorkPolicy.APPEND,
-                    workRequest
-                ).enqueue()
-            }
-            Log.d("DownloadManager", "Appended ${workRequests.size} downloads to sequential chain")
-        } else {
-            // Distribute across existing chains
-            for (i in workRequests.indices) {
-                val chainIndex = i % maxConcurrent
-                val chainName = "download_chain_${chainIndex}_$sessionId"
-                
-                Log.d("DownloadManager", "Appending work ${i + 1}/${workRequests.size} to existing chain $chainIndex")
-                
-                workManager.beginUniqueWork(
-                    chainName,
-                    ExistingWorkPolicy.APPEND,
-                    workRequests[i]
-                ).enqueue()
-            }
-            
-            Log.d("DownloadManager", "Appended ${workRequests.size} downloads to existing chains")
-        }
+        // Just enqueue the additional work - concurrency is controlled by the worker
+        workManager.enqueue(workRequests)
+        
+        Log.d("DownloadManager", "Enqueued ${workRequests.size} additional downloads")
     }
     
     /**
@@ -505,6 +471,8 @@ class DownloadManager @Inject constructor(
                     if (activeCount == 0 && (completedThisCheck + failedThisCheck + cancelledThisCheck) == session.totalDownloads) {
                         session.isCompleted = true
                         showFinalNotification()
+                        // Clean up semaphores for this session
+                        UnifiedDownloadWorker.cleanupSession(session.sessionId)
                         break
                     }
                     
@@ -604,14 +572,11 @@ class DownloadManager @Inject constructor(
             workManager.cancelAllWorkByTag("session_${session.sessionId}")
             workManager.cancelAllWorkByTag(DOWNLOAD_TAG)
             
-            // Cancel all chains for this session
-            for (i in 0 until session.maxConcurrentDownloads) {
-                val chainName = "download_chain_${i}_${session.sessionId}"
-                workManager.cancelUniqueWork(chainName)
-            }
-            
             // Mark session as completed
             session.isCompleted = true
+            
+            // Clean up semaphores for this session
+            UnifiedDownloadWorker.cleanupSession(session.sessionId)
         }
         
         // Cancel monitoring
