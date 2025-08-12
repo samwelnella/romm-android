@@ -227,6 +227,7 @@ fun RomMApp(viewModel: MainViewModel) {
                     GameListScreen(
                         games = uiState.games,
                         isLoading = uiState.isLoading,
+                        loadingProgress = uiState.loadingProgress,
                         title = screen.title,
                         onGameClick = { game ->
                             // Save scroll state before navigating
@@ -275,6 +276,12 @@ fun RomMApp(viewModel: MainViewModel) {
 }
 
 // Data Classes
+data class LoadingProgress(
+    val current: Int,
+    val total: Int,
+    val message: String
+)
+
 data class UiState(
     val currentScreen: Screen = Screen.PlatformList,
     val screenHistory: List<Screen> = emptyList(),
@@ -285,6 +292,7 @@ data class UiState(
     val scrollStates: Map<String, Int> = emptyMap(), // Cache scroll positions by screen key
     val isNavigatingBack: Boolean = false, // Track if we're navigating back vs forward
     val isLoading: Boolean = false,
+    val loadingProgress: LoadingProgress? = null,
     val error: String? = null,
     val successMessage: String? = null,
     val settings: AppSettings = AppSettings()
@@ -539,20 +547,38 @@ class MainViewModel @Inject constructor(
     private fun loadGamesForPlatform(platformId: Int) {
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(isLoading = true, error = null, games = emptyList())
-                val games = apiService.getGames(platformId = platformId)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = true, 
+                    error = null, 
+                    games = emptyList(),
+                    loadingProgress = null
+                )
+                val games = apiService.getGames(
+                    platformId = platformId,
+                    onProgress = { current, total ->
+                        _uiState.value = _uiState.value.copy(
+                            loadingProgress = LoadingProgress(
+                                current = current,
+                                total = total,
+                                message = "Loading games: $current of $total"
+                            )
+                        )
+                    }
+                )
                 val cacheKey = "platform_$platformId"
                 _uiState.value = _uiState.value.copy(
                     games = games,
                     cachedGames = _uiState.value.cachedGames + (cacheKey to games),
-                    isLoading = false
+                    isLoading = false,
+                    loadingProgress = null
                 )
                 Log.d("MainViewModel", "Loaded ${games.size} games for platform $platformId")
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to load games for platform $platformId", e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load games: ${e.message}",
-                    isLoading = false
+                    isLoading = false,
+                    loadingProgress = null
                 )
             }
         }
@@ -561,20 +587,38 @@ class MainViewModel @Inject constructor(
     private fun loadGamesForCollection(collectionId: Int) {
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(isLoading = true, error = null, games = emptyList())
-                val games = apiService.getGames(collectionId = collectionId)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = true, 
+                    error = null, 
+                    games = emptyList(),
+                    loadingProgress = null
+                )
+                val games = apiService.getGames(
+                    collectionId = collectionId,
+                    onProgress = { current, total ->
+                        _uiState.value = _uiState.value.copy(
+                            loadingProgress = LoadingProgress(
+                                current = current,
+                                total = total,
+                                message = "Loading games: $current of $total"
+                            )
+                        )
+                    }
+                )
                 val cacheKey = "collection_$collectionId"
                 _uiState.value = _uiState.value.copy(
                     games = games,
                     cachedGames = _uiState.value.cachedGames + (cacheKey to games),
-                    isLoading = false
+                    isLoading = false,
+                    loadingProgress = null
                 )
                 Log.d("MainViewModel", "Loaded ${games.size} games for collection $collectionId")
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to load games for collection $collectionId", e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load games: ${e.message}",
-                    isLoading = false
+                    isLoading = false,
+                    loadingProgress = null
                 )
             }
         }

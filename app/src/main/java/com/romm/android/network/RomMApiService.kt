@@ -146,7 +146,11 @@ class RomMApiService @Inject constructor(
         return getApi().getCollections()
     }
     
-    suspend fun getGames(platformId: Int? = null, collectionId: Int? = null): List<Game> {
+    suspend fun getGames(
+        platformId: Int? = null, 
+        collectionId: Int? = null,
+        onProgress: ((current: Int, total: Int) -> Unit)? = null
+    ): List<Game> {
         val allGames = mutableListOf<Game>()
         var offset = 0
         val limit = 1000
@@ -160,6 +164,10 @@ class RomMApiService @Inject constructor(
             )
             allGames.addAll(response.items)
             offset += response.items.size
+            
+            // Report progress
+            onProgress?.invoke(allGames.size, response.total)
+            
         } while (response.items.size == limit && offset < response.total)
         
         return allGames

@@ -21,6 +21,7 @@ import com.romm.android.data.Game
 fun GameListScreen(
     games: List<Game>,
     isLoading: Boolean,
+    loadingProgress: com.romm.android.LoadingProgress? = null,
     title: String,
     onGameClick: (Game) -> Unit,
     onDownloadAll: () -> Unit,
@@ -63,7 +64,29 @@ fun GameListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (loadingProgress != null) {
+                            LinearProgressIndicator(
+                                progress = { loadingProgress.current.toFloat() / loadingProgress.total.toFloat() },
+                                modifier = Modifier.fillMaxWidth(0.8f)
+                            )
+                            Text(
+                                text = loadingProgress.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            CircularProgressIndicator()
+                            Text(
+                                text = "Loading games...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
