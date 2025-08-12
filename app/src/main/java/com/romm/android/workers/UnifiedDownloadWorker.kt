@@ -9,6 +9,7 @@ import androidx.work.*
 import androidx.hilt.work.HiltWorker
 import com.romm.android.network.RomMApiService
 import com.romm.android.utils.DownloadManager
+import com.romm.android.utils.PlatformMapper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -115,8 +116,10 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             return Result.failure()
         }
         
-        // Get or create platform directory
-        val platformDir = getOrCreatePlatformDirectory(baseDir, platformSlug)
+        // Get or create platform directory using ES-DE mapping if available
+        val folderName = PlatformMapper.getEsdeFolderName(platformSlug)
+        Log.d("UnifiedDownloadWorker", "Platform mapping: $platformSlug -> $folderName")
+        val platformDir = getOrCreatePlatformDirectory(baseDir, folderName)
         if (platformDir == null) {
             Log.e("UnifiedDownloadWorker", "Could not create platform directory: $platformSlug")
             return Result.failure()

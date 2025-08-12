@@ -386,7 +386,12 @@ class DownloadManager @Inject constructor(
      */
     private fun gameExistsLocally(game: Game, baseDir: DocumentFile): Boolean {
         return try {
-            val platformDir = findPlatformDirectory(baseDir, game.platform_fs_slug)
+            // Use ES-DE folder mapping if available
+            val folderName = PlatformMapper.getEsdeFolderName(game.platform_fs_slug)
+            if (folderName != game.platform_fs_slug) {
+                Log.d("DownloadManager", "Platform mapping: ${game.platform_fs_slug} -> $folderName")
+            }
+            val platformDir = findPlatformDirectory(baseDir, folderName)
                 ?: return false
             
             if (game.multi) {
@@ -414,9 +419,15 @@ class DownloadManager @Inject constructor(
         platformDirCache: MutableMap<String, DocumentFile?>
     ): Boolean {
         return try {
+            // Use ES-DE folder mapping if available
+            val folderName = PlatformMapper.getEsdeFolderName(game.platform_fs_slug)
+            if (folderName != game.platform_fs_slug) {
+                Log.d("DownloadManager", "Platform mapping: ${game.platform_fs_slug} -> $folderName")
+            }
+            
             // Use cached platform directory or find and cache it
-            val platformDir = platformDirCache.getOrPut(game.platform_fs_slug) {
-                findPlatformDirectory(baseDir, game.platform_fs_slug)
+            val platformDir = platformDirCache.getOrPut(folderName) {
+                findPlatformDirectory(baseDir, folderName)
             } ?: return false
             
             if (game.multi) {
