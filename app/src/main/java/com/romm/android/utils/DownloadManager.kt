@@ -342,47 +342,96 @@ class DownloadManager @Inject constructor(
     /**
      * Download missing games - checks for file existence first
      */
-    suspend fun downloadMissingGames(games: List<Game>, settings: AppSettings) {
+    suspend fun downloadMissingGames(games: List<Game>, settings: AppSettings) = withContext(Dispatchers.IO) {
         if (settings.downloadDirectory.isEmpty()) {
             Log.e("DownloadManager", "Download directory is empty!")
-            return
+            return@withContext
         }
         
         val baseDir = DocumentFile.fromTreeUri(context, Uri.parse(settings.downloadDirectory))
         if (baseDir == null) {
             Log.e("DownloadManager", "Cannot access download directory")
-            return
+            return@withContext
         }
         
-        // Filter games that don't exist locally
-        val missingGames = games.filter { game ->
-            !gameExistsLocally(game, baseDir)
+        Log.d("DownloadManager", "Checking ${games.size} games for local existence...")
+        val startTime = System.currentTimeMillis()
+        
+        // Cache platform directories to avoid repeated lookups
+        val platformDirCache = mutableMapOf<String, DocumentFile?>()
+        
+        // Check games in parallel with limited concurrency to avoid overwhelming the filesystem
+        val missingGames = games.chunked(20).flatMap { chunk ->
+            chunk.map { game ->
+                async {
+                    val exists = gameExistsLocallyWithCache(game, baseDir, platformDirCache)
+                    if (!exists) game else null
+                }
+            }.awaitAll().filterNotNull()
         }
         
-        Log.d("DownloadManager", "Found ${missingGames.size} missing games out of ${games.size} total")
+        val checkTime = System.currentTimeMillis() - startTime
+        Log.d("DownloadManager", "Found ${missingGames.size} missing games out of ${games.size} total (checked in ${checkTime}ms)")
         
         if (missingGames.isNotEmpty()) {
-            downloadAllGames(missingGames, settings)
+            // Switch back to main context for the download call
+            withContext(Dispatchers.Main) {
+                downloadAllGames(missingGames, settings)
+            }
         }
     }
     
     /**
-     * Check if a game already exists locally
+     * Check if a game already exists locally (optimized for performance)
      */
     private fun gameExistsLocally(game: Game, baseDir: DocumentFile): Boolean {
-        val platformDir = findPlatformDirectory(baseDir, game.platform_fs_slug)
-        if (platformDir == null) {
-            return false
+        return try {
+            val platformDir = findPlatformDirectory(baseDir, game.platform_fs_slug)
+                ?: return false
+            
+            if (game.multi) {
+                // Multi-disc games are stored in a directory
+                val gameDir = platformDir.findFile(game.fs_name_no_ext)
+                gameDir?.isDirectory == true
+            } else {
+                // Single file games
+                val gameFile = platformDir.findFile(game.fs_name)
+                gameFile?.isFile == true
+            }
+        } catch (e: Exception) {
+            // If any file system operation fails, assume game doesn't exist
+            Log.w("DownloadManager", "Error checking if game exists: ${game.name}", e)
+            false
         }
-        
-        return if (game.multi) {
-            // Multi-disc games are stored in a directory
-            val gameDir = platformDir.findFile(game.fs_name_no_ext)
-            gameDir != null && gameDir.isDirectory
-        } else {
-            // Single file games
-            val gameFile = platformDir.findFile(game.fs_name)
-            gameFile != null && gameFile.isFile
+    }
+    
+    /**
+     * Check if a game already exists locally with platform directory caching
+     */
+    private suspend fun gameExistsLocallyWithCache(
+        game: Game, 
+        baseDir: DocumentFile, 
+        platformDirCache: MutableMap<String, DocumentFile?>
+    ): Boolean {
+        return try {
+            // Use cached platform directory or find and cache it
+            val platformDir = platformDirCache.getOrPut(game.platform_fs_slug) {
+                findPlatformDirectory(baseDir, game.platform_fs_slug)
+            } ?: return false
+            
+            if (game.multi) {
+                // Multi-disc games are stored in a directory
+                val gameDir = platformDir.findFile(game.fs_name_no_ext)
+                gameDir?.isDirectory == true
+            } else {
+                // Single file games
+                val gameFile = platformDir.findFile(game.fs_name)
+                gameFile?.isFile == true
+            }
+        } catch (e: Exception) {
+            // If any file system operation fails, assume game doesn't exist
+            Log.w("DownloadManager", "Error checking if game exists: ${game.name}", e)
+            false
         }
     }
     
