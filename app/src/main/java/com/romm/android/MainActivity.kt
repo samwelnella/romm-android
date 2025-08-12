@@ -539,7 +539,7 @@ class MainViewModel @Inject constructor(
     private fun loadGamesForPlatform(platformId: Int) {
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null, games = emptyList())
                 val games = apiService.getGames(platformId = platformId)
                 val cacheKey = "platform_$platformId"
                 _uiState.value = _uiState.value.copy(
@@ -561,7 +561,7 @@ class MainViewModel @Inject constructor(
     private fun loadGamesForCollection(collectionId: Int) {
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null, games = emptyList())
                 val games = apiService.getGames(collectionId = collectionId)
                 val cacheKey = "collection_$collectionId"
                 _uiState.value = _uiState.value.copy(
