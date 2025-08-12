@@ -101,78 +101,146 @@ class DownloadManager @Inject constructor(
      */
     private suspend fun checkAndRecoverOrphanedDownloads() {
         try {
-            // Get all active work first
+            // Get all work with our download tag first
             val allWork = workManager.getWorkInfosByTag(DOWNLOAD_TAG).get()
+            
+            // Debug: Log all work states with more detail
+            Log.d("DownloadManager", "=== RECOVERY DEBUG START ===")
+            Log.d("DownloadManager", "Total historical work found: ${allWork.size}")
+            
+            // Group work by state for better debugging
+            val workByState = allWork.groupBy { it.state }
+            workByState.forEach { (state, works) ->
+                Log.d("DownloadManager", "State $state: ${works.size} items")
+                if (works.size <= 10) { // Don't spam for large numbers
+                    works.forEach { work ->
+                        Log.d("DownloadManager", "  - Work ${work.id}: tags=${work.tags}")
+                    }
+                }
+            }
+            
+            // Find truly active work (ENQUEUED or RUNNING)
             val activeWork = allWork.filter { 
                 it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
             }
             
+            Log.d("DownloadManager", "Found ${activeWork.size} truly active downloads:")
+            activeWork.forEach { workInfo ->
+                Log.d("DownloadManager", "Active work ${workInfo.id}: state=${workInfo.state}, tags=${workInfo.tags}")
+            }
+            
+            // CRITICAL: Check if there are more downloads from the same session that haven't started yet
+            // Look for recent session tags in ALL work (not just active) to find the most recent session
+            val recentSessionTags = allWork.mapNotNull { workInfo ->
+                workInfo.tags.find { tag -> tag.startsWith("session_") }
+            }.distinct()
+            
+            Log.d("DownloadManager", "All session tags found in historical work: $recentSessionTags")
+            
             if (activeWork.isNotEmpty()) {
-                Log.d("DownloadManager", "Found ${activeWork.size} active downloads, attempting session recovery")
+                Log.d("DownloadManager", "Attempting session recovery for ${activeWork.size} active downloads")
                 
-                // Try to find the most recent session by looking at session tags in active work
-                val sessionTags = activeWork.mapNotNull { workInfo ->
+                // Look for session tags in active work first
+                val activeSessionTags = activeWork.mapNotNull { workInfo ->
                     workInfo.tags.find { tag -> tag.startsWith("session_") }
                 }.distinct()
                 
-                Log.d("DownloadManager", "Found session tags: $sessionTags")
+                Log.d("DownloadManager", "Session tags in active work: $activeSessionTags")
                 
-                if (sessionTags.size == 1) {
-                    // All active work belongs to the same session - use simple recovery
-                    val sessionTag = sessionTags.first()
-                    val sessionId = sessionTag.removePrefix("session_")
+                // If we have a recent session, check for ALL work from that session (including non-active)
+                val sessionToRecover = activeSessionTags.firstOrNull() ?: recentSessionTags.maxByOrNull { it }
+                
+                if (sessionToRecover != null) {
+                    val originalSessionId = sessionToRecover.removePrefix("session_")
+                    Log.d("DownloadManager", "Recovering session: $originalSessionId")
                     
-                    Log.d("DownloadManager", "Single session recovery for session: $sessionId with ${activeWork.size} active downloads")
+                    // Get ALL work from this session (active + blocked/pending)
+                    val allSessionWork = allWork.filter { workInfo ->
+                        workInfo.tags.contains(sessionToRecover)
+                    }
                     
-                    // Use simple recovery approach - just track remaining downloads
-                    // Don't try to reconstruct total counts since WorkManager may have pruned completed work
+                    Log.d("DownloadManager", "Total work items for session $originalSessionId: ${allSessionWork.size}")
+                    allSessionWork.forEach { workInfo ->
+                        Log.d("DownloadManager", "Session work ${workInfo.id}: state=${workInfo.state}")
+                    }
+                    
+                    // Count non-completed work items
+                    val nonCompletedWork = allSessionWork.filter { 
+                        it.state != WorkInfo.State.SUCCEEDED && it.state != WorkInfo.State.FAILED && it.state != WorkInfo.State.CANCELLED
+                    }
+                    
+                    Log.d("DownloadManager", "Non-completed work items: ${nonCompletedWork.size}")
+                    
+                    // Create recovery session tracking ALL work from the session
                     currentSession = DownloadSession(
-                        sessionId = "recovery_$sessionId",
-                        totalDownloads = activeWork.size,
-                        maxConcurrentDownloads = 3, // Default recovery concurrency
-                        originalSessionId = sessionId // Store original session ID for monitoring
+                        sessionId = "recovery_$originalSessionId",
+                        totalDownloads = allSessionWork.size, // Total from original session
+                        maxConcurrentDownloads = determineMaxConcurrentFromWork(activeWork),
+                        originalSessionId = originalSessionId
                     )
                     
-                    // Start with zero counters for recovery - only track new completions
-                    this.completedCount.set(0)
-                    this.failedCount.set(0)
-                    this.cancelledCount.set(0)
-                    
-                    activeWork.forEach { workInfo ->
+                    // Track ALL work from the session for monitoring
+                    allSessionWork.forEach { workInfo ->
                         currentSession?.workIds?.add(workInfo.id)
                     }
                     
-                    // Start monitoring the recovered session
-                    startSessionMonitoring()
-                    
-                    // Show recovery notification
-                    updateSummaryNotification()
+                    Log.d("DownloadManager", "Recovery session created: totalDownloads=${currentSession?.totalDownloads}, tracking ${currentSession?.workIds?.size} work items")
                 } else {
-                    // Multiple sessions or no session info - just track active downloads
-                    Log.d("DownloadManager", "Multiple or missing sessions, using simple recovery")
+                    // No session info - create simple recovery
+                    Log.d("DownloadManager", "No session info found - creating simple recovery")
                     
                     currentSession = DownloadSession(
                         sessionId = "recovery_${System.currentTimeMillis()}",
                         totalDownloads = activeWork.size,
-                        maxConcurrentDownloads = 3
+                        maxConcurrentDownloads = determineMaxConcurrentFromWork(activeWork)
                     )
-                    
-                    // Reset counters for simple recovery
-                    this.completedCount.set(0)
-                    this.failedCount.set(0)
-                    this.cancelledCount.set(0)
                     
                     activeWork.forEach { workInfo ->
                         currentSession?.workIds?.add(workInfo.id)
                     }
-                    
-                    startSessionMonitoring()
-                    updateSummaryNotification()
                 }
+                
+                // Reset counters - we'll count actual completed work during monitoring
+                this.completedCount.set(0)
+                this.failedCount.set(0)
+                this.cancelledCount.set(0)
+                
+                // Start monitoring the recovered session
+                startSessionMonitoring()
+                
+                // Show recovery notification
+                updateSummaryNotification()
+                
+                Log.d("DownloadManager", "=== RECOVERY DEBUG END - Setup complete, monitoring ${currentSession?.workIds?.size} work items ===")
+            } else {
+                Log.d("DownloadManager", "No active downloads found during recovery check")
+                Log.d("DownloadManager", "=== RECOVERY DEBUG END - No recovery needed ===")
             }
         } catch (e: Exception) {
             Log.e("DownloadManager", "Error during orphaned download recovery", e)
         }
+    }
+    
+    /**
+     * Try to determine max concurrent downloads from work data
+     */
+    private fun determineMaxConcurrentFromWork(activeWork: List<WorkInfo>): Int {
+        // WorkInfo doesn't expose inputData directly, so we'll use a reasonable default
+        // In practice, we could store this in shared preferences or elsewhere for recovery
+        
+        // For now, analyze the number of active downloads to make a reasonable guess
+        val activeCount = activeWork.size
+        
+        // If we have more than 3 active downloads, it suggests higher concurrency was set
+        val estimatedMaxConcurrent = when {
+            activeCount >= 5 -> 5
+            activeCount >= 3 -> 3
+            activeCount >= 2 -> 2
+            else -> 1
+        }
+        
+        Log.d("DownloadManager", "Estimated maxConcurrentDownloads based on ${activeCount} active items: $estimatedMaxConcurrent")
+        return estimatedMaxConcurrent
     }
     
     private fun createNotificationChannel() {
@@ -525,60 +593,74 @@ class DownloadManager @Inject constructor(
         monitoringJob = sessionScope.launch {
             val session = currentSession ?: return@launch
             
+            Log.d("DownloadManager", "Starting session monitoring for ${session.workIds.size} work items")
+            
             while (!session.isCompleted) {
                 try {
-                    // For recovery sessions, only monitor the specific work IDs in the session
-                    // For normal sessions, use the session tag
-                    val workInfos = if (session.originalSessionId != null && session.workIds.isNotEmpty()) {
-                        // Recovery session - only check the specific work IDs we're tracking
-                        session.workIds.mapNotNull { workId ->
-                            try {
-                                workManager.getWorkInfoById(workId).get()
-                            } catch (e: Exception) {
-                                Log.w("DownloadManager", "Could not get work info for $workId", e)
-                                null
-                            }
+                    // Always monitor the specific work IDs we're tracking
+                    val workInfos = session.workIds.mapNotNull { workId ->
+                        try {
+                            workManager.getWorkInfoById(workId).get()
+                        } catch (e: Exception) {
+                            Log.w("DownloadManager", "Could not get work info for $workId", e)
+                            null
                         }
-                    } else {
-                        // Normal session - use session tag
-                        val sessionTag = "session_${session.sessionId}"
-                        workManager.getWorkInfosByTag(sessionTag).get()
                     }
-                    
-                    Log.d("DownloadManager", "Monitoring ${workInfos.size} work items")
                     
                     var activeCount = 0
                     var completedThisCheck = 0
                     var failedThisCheck = 0
                     var cancelledThisCheck = 0
                     
+                    Log.d("DownloadManager", "=== MONITORING UPDATE ===")
+                    Log.d("DownloadManager", "Checking ${workInfos.size} work items:")
+                    
                     for (workInfo in workInfos) {
+                        Log.d("DownloadManager", "Work ${workInfo.id}: state=${workInfo.state}")
                         when (workInfo.state) {
                             WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED -> activeCount++
                             WorkInfo.State.SUCCEEDED -> completedThisCheck++
                             WorkInfo.State.FAILED -> failedThisCheck++
                             WorkInfo.State.CANCELLED -> cancelledThisCheck++
-                            else -> {}
+                            else -> {
+                                Log.d("DownloadManager", "Work ${workInfo.id}: unexpected state ${workInfo.state}")
+                            }
                         }
                     }
                     
-                    // Update counters normally for all sessions now
+                    Log.d("DownloadManager", "Count summary: active=$activeCount, completed=$completedThisCheck, failed=$failedThisCheck, cancelled=$cancelledThisCheck, total=${session.totalDownloads}")
+                    
+                    // Update counters
+                    val prevCompleted = completedCount.get()
+                    val prevFailed = failedCount.get()
+                    val prevCancelled = cancelledCount.get()
+                    
                     completedCount.set(completedThisCheck)
                     failedCount.set(failedThisCheck)
                     cancelledCount.set(cancelledThisCheck)
+                    
+                    // Log counter changes
+                    if (completedThisCheck != prevCompleted || failedThisCheck != prevFailed || cancelledThisCheck != prevCancelled) {
+                        Log.d("DownloadManager", "Counters updated: completed $prevCompleted->$completedThisCheck, failed $prevFailed->$failedThisCheck, cancelled $prevCancelled->$cancelledThisCheck")
+                    }
                     
                     // Update notification
                     updateSummaryNotification()
                     
                     // Check if session is complete
-                    if (activeCount == 0 && (completedThisCheck + failedThisCheck + cancelledThisCheck) == session.totalDownloads) {
+                    val totalProcessed = completedThisCheck + failedThisCheck + cancelledThisCheck
+                    if (activeCount == 0 && totalProcessed >= session.totalDownloads) {
+                        Log.d("DownloadManager", "Session completed: $totalProcessed out of ${session.totalDownloads} processed")
                         session.isCompleted = true
                         showFinalNotification()
+                        
                         // Clean up semaphores for this session
                         val cleanupSessionId = session.originalSessionId ?: session.sessionId
                         UnifiedDownloadWorker.cleanupSession(cleanupSessionId)
                         break
                     }
+                    
+                    Log.d("DownloadManager", "=== MONITORING UPDATE END ===")
                     
                     delay(1000) // Check every second
                 } catch (e: Exception) {
