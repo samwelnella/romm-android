@@ -118,40 +118,27 @@ class DownloadManager @Inject constructor(
                 Log.d("DownloadManager", "Found session tags: $sessionTags")
                 
                 if (sessionTags.size == 1) {
-                    // All active work belongs to the same session - perfect!
+                    // All active work belongs to the same session - use simple recovery
                     val sessionTag = sessionTags.first()
                     val sessionId = sessionTag.removePrefix("session_")
                     
-                    // Get all work for this specific session (active + completed)
-                    val sessionWork = workManager.getWorkInfosByTag(sessionTag).get()
-                    val sessionActive = sessionWork.filter { 
-                        it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
-                    }
-                    val sessionCompleted = sessionWork.filter {
-                        it.state == WorkInfo.State.SUCCEEDED || it.state == WorkInfo.State.FAILED || it.state == WorkInfo.State.CANCELLED
-                    }
+                    Log.d("DownloadManager", "Single session recovery for session: $sessionId with ${activeWork.size} active downloads")
                     
-                    val totalOriginalDownloads = sessionActive.size + sessionCompleted.size
-                    val completedCount = sessionCompleted.count { it.state == WorkInfo.State.SUCCEEDED }
-                    val failedCount = sessionCompleted.count { it.state == WorkInfo.State.FAILED }
-                    val cancelledCount = sessionCompleted.count { it.state == WorkInfo.State.CANCELLED }
-                    
-                    Log.d("DownloadManager", "Session $sessionId recovery: $totalOriginalDownloads total ($completedCount completed, $failedCount failed, $cancelledCount cancelled, ${sessionActive.size} active)")
-                    
-                    // Create recovery session with correct totals
+                    // Use simple recovery approach - just track remaining downloads
+                    // Don't try to reconstruct total counts since WorkManager may have pruned completed work
                     currentSession = DownloadSession(
                         sessionId = "recovery_$sessionId",
-                        totalDownloads = totalOriginalDownloads,
+                        totalDownloads = activeWork.size,
                         maxConcurrentDownloads = 3, // Default recovery concurrency
                         originalSessionId = sessionId // Store original session ID for monitoring
                     )
                     
-                    // Set the counters to reflect completed work
-                    this.completedCount.set(completedCount)
-                    this.failedCount.set(failedCount)
-                    this.cancelledCount.set(cancelledCount)
+                    // Start with zero counters for recovery - only track new completions
+                    this.completedCount.set(0)
+                    this.failedCount.set(0)
+                    this.cancelledCount.set(0)
                     
-                    sessionActive.forEach { workInfo ->
+                    activeWork.forEach { workInfo ->
                         currentSession?.workIds?.add(workInfo.id)
                     }
                     
@@ -540,15 +527,25 @@ class DownloadManager @Inject constructor(
             
             while (!session.isCompleted) {
                 try {
-                    // Use original session ID for recovery sessions, otherwise use current session ID
-                    val sessionTag = if (session.originalSessionId != null) {
-                        "session_${session.originalSessionId}"
+                    // For recovery sessions, only monitor the specific work IDs in the session
+                    // For normal sessions, use the session tag
+                    val workInfos = if (session.originalSessionId != null && session.workIds.isNotEmpty()) {
+                        // Recovery session - only check the specific work IDs we're tracking
+                        session.workIds.mapNotNull { workId ->
+                            try {
+                                workManager.getWorkInfoById(workId).get()
+                            } catch (e: Exception) {
+                                Log.w("DownloadManager", "Could not get work info for $workId", e)
+                                null
+                            }
+                        }
                     } else {
-                        "session_${session.sessionId}"
+                        // Normal session - use session tag
+                        val sessionTag = "session_${session.sessionId}"
+                        workManager.getWorkInfosByTag(sessionTag).get()
                     }
                     
-                    Log.d("DownloadManager", "Monitoring session with tag: $sessionTag")
-                    val workInfos = workManager.getWorkInfosByTag(sessionTag).get()
+                    Log.d("DownloadManager", "Monitoring ${workInfos.size} work items")
                     
                     var activeCount = 0
                     var completedThisCheck = 0
@@ -565,7 +562,7 @@ class DownloadManager @Inject constructor(
                         }
                     }
                     
-                    // Update counters
+                    // Update counters normally for all sessions now
                     completedCount.set(completedThisCheck)
                     failedCount.set(failedThisCheck)
                     cancelledCount.set(cancelledThisCheck)
