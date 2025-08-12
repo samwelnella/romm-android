@@ -245,7 +245,10 @@ fun RomMApp(viewModel: MainViewModel) {
                     GameDetailsScreen(
                         game = screen.game,
                         onDownload = viewModel::downloadGame,
-                        onBack = viewModel::goBack
+                        onBack = viewModel::goBack,
+                        hostUrl = uiState.settings.host,
+                        username = uiState.settings.username,
+                        password = uiState.settings.password
                     )
                 }
             }

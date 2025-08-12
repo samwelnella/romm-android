@@ -1,24 +1,42 @@
 package com.romm.android.ui.screens
 
+import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.request.ImageRequest
 import com.romm.android.data.Game
+import okhttp3.Credentials
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameDetailsScreen(
     game: Game,
     onDownload: (Game) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    hostUrl: String = "",
+    username: String = "",
+    password: String = ""
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -42,35 +60,107 @@ fun GameDetailsScreen(
         }
         
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Game Information Card (smaller now)
+                Card(
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        "Game Information",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    
-                    GameInfoRow("Platform", game.platform_slug)
-                    GameInfoRow("File Name", game.fs_name)
-                    
-                    if (game.regions.isNotEmpty()) {
-                        GameInfoRow("Regions", game.regions.joinToString(", "))
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Game Information",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        
+                        GameInfoRow("Platform", game.platform_slug)
+                        GameInfoRow("File Name", game.fs_name)
+                        
+                        if (game.regions.isNotEmpty()) {
+                            GameInfoRow("Regions", game.regions.joinToString(", "))
+                        }
+                        
+                        if (game.languages.isNotEmpty()) {
+                            GameInfoRow("Languages", game.languages.joinToString(", "))
+                        }
+                        
+                        if (game.revision != null) {
+                            GameInfoRow("Revision", game.revision)
+                        }
+                        
+                        GameInfoRow("Multi-disc", if (game.multi) "Yes" else "No")
+                        GameInfoRow("Files", game.files.size.toString())
                     }
+                }
+                
+                // Cover Image (on the right)
+                if (!game.path_cover_small.isNullOrEmpty() && hostUrl.isNotEmpty()) {
+                    val coverImageUrl = buildCoverImageUrl(hostUrl, game.path_cover_small)
+                    Log.d("GameDetailsScreen", "Loading cover image from: $coverImageUrl")
+                    Log.d("GameDetailsScreen", "Cover path: ${game.path_cover_small}")
                     
-                    if (game.languages.isNotEmpty()) {
-                        GameInfoRow("Languages", game.languages.joinToString(", "))
+                    var showError by remember(coverImageUrl) { mutableStateOf(false) }
+                    var isLoading by remember(coverImageUrl) { mutableStateOf(true) }
+                    
+                    Box(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (showError) {
+                            Icon(
+                                Icons.Filled.Image,
+                                contentDescription = "No cover art",
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(coverImageUrl)
+                                    .addHeader("Authorization", Credentials.basic(username, password))
+                                    .addHeader("Accept", "image/*")
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Game cover art",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                onState = { state ->
+                                    when (state) {
+                                        is AsyncImagePainter.State.Loading -> {
+                                            isLoading = true
+                                            showError = false
+                                        }
+                                        is AsyncImagePainter.State.Success -> {
+                                            isLoading = false
+                                            showError = false
+                                        }
+                                        is AsyncImagePainter.State.Error -> {
+                                            isLoading = false
+                                            showError = true
+                                        }
+                                        else -> {}
+                                    }
+                                }
+                            )
+                        }
+                        
+                        // Loading indicator
+                        if (isLoading && !showError) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
-                    
-                    if (game.revision != null) {
-                        GameInfoRow("Revision", game.revision)
-                    }
-                    
-                    GameInfoRow("Multi-disc", if (game.multi) "Yes" else "No")
-                    GameInfoRow("Files", game.files.size.toString())
                 }
             }
         }
@@ -176,4 +266,29 @@ fun formatBytes(bytes: Long): String {
     }
     
     return "%.1f %s".format(size, units[unitIndex])
+}
+
+private fun getCoverImageUrl(game: Game, hostUrl: String): String? {
+    // Try different cover sources in order of preference
+    return when {
+        // First try direct URL (might be external URL like IGDB)
+        !game.url_cover.isNullOrEmpty() -> game.url_cover
+        // Then try large cover path
+        !game.path_cover_large.isNullOrEmpty() && hostUrl.isNotEmpty() -> 
+            buildCoverImageUrl(hostUrl, game.path_cover_large)
+        // Finally try small cover path
+        !game.path_cover_small.isNullOrEmpty() && hostUrl.isNotEmpty() -> 
+            buildCoverImageUrl(hostUrl, game.path_cover_small)
+        // No cover available
+        else -> null
+    }
+}
+
+private fun buildCoverImageUrl(hostUrl: String, coverPath: String): String {
+    val baseUrl = if (hostUrl.endsWith("/")) hostUrl else "$hostUrl/"
+    // Remove the leading slash but keep "assets/" since we're accessing assets directly
+    val cleanPath = coverPath.removePrefix("/")
+    // Remove timestamp parameter (?ts=...) if present
+    val pathWithoutTimestamp = cleanPath.split("?")[0]
+    return "$baseUrl$pathWithoutTimestamp"
 }

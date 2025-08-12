@@ -16,6 +16,8 @@ data class Game(
     val files: List<RomFile>,
     val summary: String?,
     val path_cover_small: String?,
+    val path_cover_large: String?,
+    val url_cover: String?,
     val missing_from_fs: Boolean
 )
 

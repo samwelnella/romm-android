@@ -48,6 +48,9 @@ interface RomMApi {
     
     @POST("api/login")
     suspend fun login(): LoginResponse
+    
+    @GET("api/raw/assets/{path}")
+    suspend fun getCoverImage(@Path("path", encoded = true) path: String): Response<ResponseBody>
 }
 
 data class GameResponse(
@@ -165,5 +168,9 @@ class RomMApiService @Inject constructor(
     
     suspend fun downloadFirmware(id: Int, fileName: String): Response<ResponseBody> {
         return getApi().downloadFirmware(id, fileName)
+    }
+    
+    suspend fun getCoverImage(path: String): Response<ResponseBody> {
+        return getApi().getCoverImage(path)
     }
 }
