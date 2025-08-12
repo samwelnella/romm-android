@@ -48,7 +48,8 @@ class DownloadManager @Inject constructor(
         var totalDownloads: Int,
         val maxConcurrentDownloads: Int,
         val workIds: MutableSet<UUID> = mutableSetOf(),
-        var isCompleted: Boolean = false
+        var isCompleted: Boolean = false,
+        val originalSessionId: String? = null // For recovery sessions
     )
     
     data class DownloadItem(
@@ -87,6 +88,103 @@ class DownloadManager @Inject constructor(
             context.registerReceiver(cancelReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             context.registerReceiver(cancelReceiver, filter)
+        }
+        
+        // Check for orphaned downloads on startup (recovery from crash)
+        sessionScope.launch {
+            checkAndRecoverOrphanedDownloads()
+        }
+    }
+    
+    /**
+     * Check for downloads that are still running after app restart (crash recovery)
+     */
+    private suspend fun checkAndRecoverOrphanedDownloads() {
+        try {
+            // Get all active work first
+            val allWork = workManager.getWorkInfosByTag(DOWNLOAD_TAG).get()
+            val activeWork = allWork.filter { 
+                it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
+            }
+            
+            if (activeWork.isNotEmpty()) {
+                Log.d("DownloadManager", "Found ${activeWork.size} active downloads, attempting session recovery")
+                
+                // Try to find the most recent session by looking at session tags in active work
+                val sessionTags = activeWork.mapNotNull { workInfo ->
+                    workInfo.tags.find { tag -> tag.startsWith("session_") }
+                }.distinct()
+                
+                Log.d("DownloadManager", "Found session tags: $sessionTags")
+                
+                if (sessionTags.size == 1) {
+                    // All active work belongs to the same session - perfect!
+                    val sessionTag = sessionTags.first()
+                    val sessionId = sessionTag.removePrefix("session_")
+                    
+                    // Get all work for this specific session (active + completed)
+                    val sessionWork = workManager.getWorkInfosByTag(sessionTag).get()
+                    val sessionActive = sessionWork.filter { 
+                        it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
+                    }
+                    val sessionCompleted = sessionWork.filter {
+                        it.state == WorkInfo.State.SUCCEEDED || it.state == WorkInfo.State.FAILED || it.state == WorkInfo.State.CANCELLED
+                    }
+                    
+                    val totalOriginalDownloads = sessionActive.size + sessionCompleted.size
+                    val completedCount = sessionCompleted.count { it.state == WorkInfo.State.SUCCEEDED }
+                    val failedCount = sessionCompleted.count { it.state == WorkInfo.State.FAILED }
+                    val cancelledCount = sessionCompleted.count { it.state == WorkInfo.State.CANCELLED }
+                    
+                    Log.d("DownloadManager", "Session $sessionId recovery: $totalOriginalDownloads total ($completedCount completed, $failedCount failed, $cancelledCount cancelled, ${sessionActive.size} active)")
+                    
+                    // Create recovery session with correct totals
+                    currentSession = DownloadSession(
+                        sessionId = "recovery_$sessionId",
+                        totalDownloads = totalOriginalDownloads,
+                        maxConcurrentDownloads = 3, // Default recovery concurrency
+                        originalSessionId = sessionId // Store original session ID for monitoring
+                    )
+                    
+                    // Set the counters to reflect completed work
+                    this.completedCount.set(completedCount)
+                    this.failedCount.set(failedCount)
+                    this.cancelledCount.set(cancelledCount)
+                    
+                    sessionActive.forEach { workInfo ->
+                        currentSession?.workIds?.add(workInfo.id)
+                    }
+                    
+                    // Start monitoring the recovered session
+                    startSessionMonitoring()
+                    
+                    // Show recovery notification
+                    updateSummaryNotification()
+                } else {
+                    // Multiple sessions or no session info - just track active downloads
+                    Log.d("DownloadManager", "Multiple or missing sessions, using simple recovery")
+                    
+                    currentSession = DownloadSession(
+                        sessionId = "recovery_${System.currentTimeMillis()}",
+                        totalDownloads = activeWork.size,
+                        maxConcurrentDownloads = 3
+                    )
+                    
+                    // Reset counters for simple recovery
+                    this.completedCount.set(0)
+                    this.failedCount.set(0)
+                    this.cancelledCount.set(0)
+                    
+                    activeWork.forEach { workInfo ->
+                        currentSession?.workIds?.add(workInfo.id)
+                    }
+                    
+                    startSessionMonitoring()
+                    updateSummaryNotification()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DownloadManager", "Error during orphaned download recovery", e)
         }
     }
     
@@ -442,7 +540,15 @@ class DownloadManager @Inject constructor(
             
             while (!session.isCompleted) {
                 try {
-                    val workInfos = workManager.getWorkInfosByTag("session_${session.sessionId}").get()
+                    // Use original session ID for recovery sessions, otherwise use current session ID
+                    val sessionTag = if (session.originalSessionId != null) {
+                        "session_${session.originalSessionId}"
+                    } else {
+                        "session_${session.sessionId}"
+                    }
+                    
+                    Log.d("DownloadManager", "Monitoring session with tag: $sessionTag")
+                    val workInfos = workManager.getWorkInfosByTag(sessionTag).get()
                     
                     var activeCount = 0
                     var completedThisCheck = 0
@@ -472,7 +578,8 @@ class DownloadManager @Inject constructor(
                         session.isCompleted = true
                         showFinalNotification()
                         // Clean up semaphores for this session
-                        UnifiedDownloadWorker.cleanupSession(session.sessionId)
+                        val cleanupSessionId = session.originalSessionId ?: session.sessionId
+                        UnifiedDownloadWorker.cleanupSession(cleanupSessionId)
                         break
                     }
                     
@@ -573,15 +680,16 @@ class DownloadManager @Inject constructor(
         if (session != null) {
             Log.d("DownloadManager", "Cancelling all downloads for session: ${session.sessionId}")
             
-            // Cancel all work by tags
-            workManager.cancelAllWorkByTag("session_${session.sessionId}")
+            // Cancel all work by tags (use original session ID for recovery sessions)
+            val cancelSessionId = session.originalSessionId ?: session.sessionId
+            workManager.cancelAllWorkByTag("session_$cancelSessionId")
             workManager.cancelAllWorkByTag(DOWNLOAD_TAG)
             
             // Mark session as completed
             session.isCompleted = true
             
             // Clean up semaphores for this session
-            UnifiedDownloadWorker.cleanupSession(session.sessionId)
+            UnifiedDownloadWorker.cleanupSession(cancelSessionId)
         }
         
         // Cancel monitoring
