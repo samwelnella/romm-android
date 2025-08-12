@@ -436,26 +436,15 @@ class DownloadManager @Inject constructor(
     }
     
     /**
-     * Find platform directory (handles numbered variants)
+     * Find platform directory (exact match only - ignore numbered variants)
      */
     private fun findPlatformDirectory(baseDir: DocumentFile, platformSlug: String): DocumentFile? {
         val files = baseDir.listFiles()
         
-        // First pass: exact match
+        // Only exact match - ignore numbered variants to prevent using accidentally created duplicates
         for (file in files) {
             if (file.isDirectory && file.name == platformSlug) {
                 return file
-            }
-        }
-        
-        // Second pass: numbered variants like "snes (1)"
-        for (file in files) {
-            if (file.isDirectory) {
-                val name = file.name ?: continue
-                val regex = Regex("^${Regex.escape(platformSlug)}\\s*\\(\\d+\\)$")
-                if (regex.matches(name)) {
-                    return file
-                }
             }
         }
         
