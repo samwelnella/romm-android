@@ -706,6 +706,9 @@ class DownloadManager @Inject constructor(
             .setAutoCancel(false)
             .setNumber(activeDownloads)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel All", cancelIntent)
+            .setShowWhen(false)
+            // Don't group the summary - let it stand alone
+            // Individual notifications will be grouped together separately
             .build()
         
         notificationManager.notify(SUMMARY_NOTIFICATION_ID, notification)
@@ -746,6 +749,7 @@ class DownloadManager @Inject constructor(
             .setOngoing(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setNumber(session.totalDownloads)
+            // Don't group final notification - let it stand alone
             .build()
         
         notificationManager.notify(SUMMARY_NOTIFICATION_ID, notification)
@@ -807,5 +811,6 @@ class DownloadManager @Inject constructor(
         const val SUMMARY_NOTIFICATION_ID = 999999
         const val DOWNLOAD_TAG = "unified_download"
         const val ACTION_CANCEL_ALL = "com.romm.android.ACTION_CANCEL_ALL_DOWNLOADS"
+        const val NOTIFICATION_GROUP_KEY = "com.romm.android.DOWNLOAD_GROUP"
     }
 }
