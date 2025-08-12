@@ -22,7 +22,8 @@ interface RomMApi {
     suspend fun getRoms(
         @Query("platform_id") platformId: Int? = null,
         @Query("collection_id") collectionId: Int? = null,
-        @Query("limit") limit: Int = 1000
+        @Query("limit") limit: Int = 1000,
+        @Query("offset") offset: Int = 0
     ): GameResponse
     
     @GET("api/roms/{id}")
@@ -146,8 +147,22 @@ class RomMApiService @Inject constructor(
     }
     
     suspend fun getGames(platformId: Int? = null, collectionId: Int? = null): List<Game> {
-        val response = getApi().getRoms(platformId = platformId, collectionId = collectionId)
-        return response.items
+        val allGames = mutableListOf<Game>()
+        var offset = 0
+        val limit = 1000
+        
+        do {
+            val response = getApi().getRoms(
+                platformId = platformId, 
+                collectionId = collectionId,
+                limit = limit,
+                offset = offset
+            )
+            allGames.addAll(response.items)
+            offset += response.items.size
+        } while (response.items.size == limit && offset < response.total)
+        
+        return allGames
     }
     
     suspend fun getGame(id: Int): Game {
