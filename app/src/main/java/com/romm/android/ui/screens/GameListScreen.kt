@@ -34,11 +34,25 @@ fun GameListScreen(
     lazyListState: LazyListState = rememberLazyListState()
 ) {
     var showBottomSheet by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     
-    // Create alphabet index for games
-    val gamesByLetter = remember(games) {
-        games.groupBy { game ->
+    // Filter games based on search query
+    val filteredGames = remember(games, searchQuery) {
+        if (searchQuery.isEmpty()) {
+            games
+        } else {
+            games.filter { game ->
+                val name = game.name ?: game.fs_name_no_ext
+                name.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+    
+    // Create alphabet index for filtered games
+    val gamesByLetter = remember(filteredGames) {
+        filteredGames.groupBy { game ->
             val name = game.name ?: game.fs_name_no_ext
             val firstChar = name.firstOrNull()?.uppercaseChar()
             when {
@@ -49,17 +63,31 @@ fun GameListScreen(
         }.toSortedMap()
     }
     
-    // Calculate item indices for each letter
-    val letterIndices = remember(games) {
+    // Calculate item indices for each letter by walking through filteredGames in order
+    val letterIndices = remember(filteredGames, isLoading) {
         val indices = mutableMapOf<String, Int>()
         var currentIndex = 1 // Start at 1 to account for header item
+        
+        // Add search bar item
+        currentIndex++
         
         // Add loading item index if loading
         if (isLoading) currentIndex++
         
-        gamesByLetter.forEach { (letter, gamesForLetter) ->
-            indices[letter] = currentIndex
-            currentIndex += gamesForLetter.size
+        // Walk through games in the order they appear in the LazyColumn
+        filteredGames.forEachIndexed { gameIndex, game ->
+            val name = game.name ?: game.fs_name_no_ext
+            val firstChar = name.firstOrNull()?.uppercaseChar()
+            val letter = when {
+                firstChar == null -> "#"
+                firstChar.isLetter() -> firstChar.toString()
+                else -> "#"
+            }
+            
+            // Only record the first occurrence of each letter
+            if (!indices.containsKey(letter)) {
+                indices[letter] = currentIndex + gameIndex
+            }
         }
         indices
     }
@@ -84,9 +112,55 @@ fun GameListScreen(
                         style = MaterialTheme.typography.headlineMedium,
                         modifier = Modifier.weight(1f)
                     )
+                    if (!isSearchActive) {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                        }
+                    }
                     IconButton(onClick = { showBottomSheet = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More options")
                     }
+                }
+            }
+            
+            item {
+                if (isSearchActive) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Search games...") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Search, contentDescription = null)
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { 
+                            isSearchActive = false
+                            searchQuery = ""
+                        }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close search")
+                        }
+                    }
+                } else if (searchQuery.isNotEmpty()) {
+                    // Show search summary when search is not active but has results
+                    Text(
+                        text = "Showing ${filteredGames.size} of ${games.size} games",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
                 }
             }
             
@@ -123,7 +197,40 @@ fun GameListScreen(
                 }
             }
             
-            items(games) { game ->
+            if (filteredGames.isEmpty() && searchQuery.isNotEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "No games found",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Try adjusting your search terms",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            
+            items(filteredGames) { game ->
                 GameCard(
                     game = game,
                     onClick = { onGameClick(game) }
@@ -132,21 +239,32 @@ fun GameListScreen(
         }
         
         // Alphabet scrubber positioned on the right side
-        if (games.isNotEmpty() && !isLoading) {
+        // Hide scrubber during search or when no filtered games
+        if (filteredGames.isNotEmpty() && !isLoading && searchQuery.isEmpty()) {
+            val topPadding = if (isSearchActive || searchQuery.isNotEmpty()) {
+                16.dp + 56.dp + 56.dp + 16.dp // header + search bar + spacing
+            } else {
+                16.dp + 56.dp + 8.dp // header + spacing
+            }
+            
             AlphabetScrubber(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .fillMaxHeight()
                     .padding(
                         end = 8.dp, 
-                        top = 16.dp, // Same as LazyColumn contentPadding.top
+                        top = topPadding,
                         bottom = 16.dp
                     ),
                 onLetterSelected = { letter ->
                     val targetIndex = letterIndices[letter]
                     if (targetIndex != null) {
                         coroutineScope.launch {
-                            lazyListState.animateScrollToItem(targetIndex)
+                            // Scroll so the first game with this letter appears at the top
+                            lazyListState.animateScrollToItem(
+                                index = targetIndex,
+                                scrollOffset = 0 // Ensure it's at the very top
+                            )
                         }
                     }
                 }

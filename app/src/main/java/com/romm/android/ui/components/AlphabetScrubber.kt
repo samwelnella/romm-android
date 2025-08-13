@@ -19,7 +19,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
+
+data class DisplayPattern(
+    val step: Int,
+    val allLetters: List<String>,
+    val hiddenIndices: Set<Int>
+)
+
+sealed class DisplayItem {
+    data class Letter(val letter: String) : DisplayItem()
+    object Dot : DisplayItem()
+}
 
 @Composable
 fun AlphabetScrubber(
@@ -34,41 +46,31 @@ fun AlphabetScrubber(
     var selectedLetter by remember { mutableStateOf<String?>(null) }
     var isDragging by remember { mutableStateOf(false) }
     var componentSize by remember { mutableStateOf(IntSize.Zero) }
+    var touchY by remember { mutableStateOf(0f) }
     val density = LocalDensity.current
     
-    // Dynamically determine which letters to show based on screen height
-    val letters = remember(componentSize) {
+    // Calculate display pattern based on screen height
+    val displayPattern = remember(componentSize) {
         val availableHeight = componentSize.height
-        if (availableHeight == 0) return@remember allLetters
+        if (availableHeight == 0) return@remember DisplayPattern(1, allLetters, emptySet())
         
-        // Be more aggressive - calculate space needed per letter with more padding
-        // Account for font size, padding, and visual breathing room
-        val minLetterHeight = with(density) { 22.dp.toPx() } // Increased from 16dp to 22dp
-        val maxLettersToShow = (availableHeight / minLetterHeight).toInt().coerceAtLeast(8)
+        // Be more aggressive - calculate space needed per item with more padding
+        // Account for font size, padding, and visual breathing room + dots
+        val minItemHeight = with(density) { 20.dp.toPx() }
+        val maxItemsToShow = (availableHeight / minItemHeight).toInt().coerceAtLeast(8)
         
         when {
-            maxLettersToShow >= 27 -> allLetters
-            maxLettersToShow >= 20 -> {
-                // Skip some less common letters
-                listOf("#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "W", "Y", "Z")
-            }
-            maxLettersToShow >= 16 -> {
-                // Show most vowels and common consonants
-                listOf("#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "W", "Z")
-            }
-            maxLettersToShow >= 14 -> {
-                // Skip more consonants
-                listOf("#", "A", "C", "E", "G", "I", "K", "M", "O", "Q", "S", "U", "W", "Y")
-            }
-            maxLettersToShow >= 12 -> {
-                // Even more aggressive culling
-                listOf("#", "A", "C", "F", "I", "L", "O", "R", "U", "X")
-            }
-            else -> {
-                // Very small screens - minimal set
-                listOf("#", "A", "F", "L", "R", "X")
-            }
+            maxItemsToShow >= 27 -> DisplayPattern(1, allLetters, emptySet()) // Show all
+            maxItemsToShow >= 18 -> DisplayPattern(2, allLetters, emptySet()) // Show every other
+            maxItemsToShow >= 13 -> DisplayPattern(3, allLetters, emptySet()) // Show every 3rd
+            maxItemsToShow >= 10 -> DisplayPattern(4, allLetters, emptySet()) // Show every 4th
+            else -> DisplayPattern(5, allLetters, emptySet()) // Show every 5th
         }
+    }
+    
+    // Generate display items (letters and dots) based on pattern
+    val displayItems = remember(displayPattern) {
+        buildDisplayItems(allLetters, displayPattern.step)
     }
     
     Box(
@@ -91,13 +93,13 @@ fun AlphabetScrubber(
                     onDragStart = { offset ->
                         isDragging = true
                         currentY = offset.y
-                        val letterIndex = calculateLetterIndex(currentY, componentSize.height, letters.size)
-                        val letter = letters.getOrNull(letterIndex)
+                        touchY = offset.y
+                        // Map position to full alphabet, not just displayed items
+                        val letterIndex = calculateLetterIndex(currentY, componentSize.height, allLetters.size)
+                        val letter = allLetters.getOrNull(letterIndex)
                         if (letter != null) {
                             selectedLetter = letter
-                            // Map displayed letter to closest actual letter for scrolling
-                            val targetLetter = findClosestActualLetter(letter, allLetters)
-                            onLetterSelected(targetLetter)
+                            onLetterSelected(letter)
                         }
                     },
                     onDragEnd = {
@@ -108,13 +110,13 @@ fun AlphabetScrubber(
                         // Update current position
                         currentY += dragAmount.y
                         currentY = currentY.coerceIn(0f, componentSize.height.toFloat())
-                        val letterIndex = calculateLetterIndex(currentY, componentSize.height, letters.size)
-                        val letter = letters.getOrNull(letterIndex)
+                        touchY = currentY
+                        // Map position to full alphabet, not just displayed items
+                        val letterIndex = calculateLetterIndex(currentY, componentSize.height, allLetters.size)
+                        val letter = allLetters.getOrNull(letterIndex)
                         if (letter != null && letter != selectedLetter) {
                             selectedLetter = letter
-                            // Map displayed letter to closest actual letter for scrolling
-                            val targetLetter = findClosestActualLetter(letter, allLetters)
-                            onLetterSelected(targetLetter)
+                            onLetterSelected(letter)
                         }
                     }
                 )
@@ -126,49 +128,65 @@ fun AlphabetScrubber(
                 .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            letters.forEach { letter ->
-                val fontSize = when {
-                    letters.size <= 10 -> 12.sp
-                    letters.size <= 15 -> 11.sp
-                    letters.size <= 20 -> 10.sp
-                    else -> 9.sp
-                }
-                
+            displayItems.forEach { item ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = letter,
-                        fontSize = fontSize,
-                        fontWeight = if (letter == selectedLetter) FontWeight.Bold else FontWeight.Normal,
-                        color = if (letter == selectedLetter) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        textAlign = TextAlign.Center
-                    )
+                    when (item) {
+                        is DisplayItem.Letter -> {
+                            val fontSize = when {
+                                displayItems.size <= 15 -> 11.sp
+                                displayItems.size <= 25 -> 10.sp
+                                else -> 9.sp
+                            }
+                            
+                            Text(
+                                text = item.letter,
+                                fontSize = fontSize,
+                                fontWeight = if (item.letter == selectedLetter) FontWeight.Bold else FontWeight.Normal,
+                                color = if (item.letter == selectedLetter) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        is DisplayItem.Dot -> {
+                            Box(
+                                modifier = Modifier
+                                    .size(3.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        androidx.compose.foundation.shape.CircleShape
+                                    )
+                            )
+                        }
+                    }
                 }
             }
         }
     }
     
-    // Show selected letter overlay when dragging
+    // Show touch feedback bubble when dragging
     if (isDragging && selectedLetter != null) {
+        val bubbleOffsetY = with(density) { touchY.toDp() } - 24.dp // Center the bubble on touch position
+        
         Box(
             modifier = Modifier
-                .offset(x = (-60).dp)
+                .offset(x = (-72).dp, y = bubbleOffsetY)
                 .size(48.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.primary),
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.primary)
+                .zIndex(10f), // Ensure it appears above the game list
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = selectedLetter!!,
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary
             )
@@ -182,30 +200,24 @@ private fun calculateLetterIndex(yOffset: Float, componentHeight: Int, letterCou
     return index.coerceIn(0, letterCount - 1)
 }
 
-private fun findClosestActualLetter(displayedLetter: String, allLetters: List<String>): String {
-    // If the displayed letter exists in all letters, return it
-    if (allLetters.contains(displayedLetter)) {
-        return displayedLetter
-    }
+private fun buildDisplayItems(allLetters: List<String>, step: Int): List<DisplayItem> {
+    val items = mutableListOf<DisplayItem>()
     
-    // Otherwise, find the closest letter alphabetically
-    val displayedIndex = when (displayedLetter) {
-        "#" -> -1
-        else -> displayedLetter.first().code - 'A'.code
-    }
-    
-    // Find the closest letter that actually exists
-    for (letter in allLetters) {
-        val letterIndex = when (letter) {
-            "#" -> -1
-            else -> letter.first().code - 'A'.code
-        }
-        
-        if (letterIndex >= displayedIndex) {
-            return letter
+    allLetters.forEachIndexed { index, letter ->
+        if (index % step == 0) {
+            // Show this letter
+            items.add(DisplayItem.Letter(letter))
+            
+            // Add dots for hidden letters (except for the last shown letter)
+            if (index + step < allLetters.size) {
+                val hiddenCount = minOf(step - 1, allLetters.size - index - 1)
+                if (hiddenCount > 0) {
+                    // Add a single dot to represent hidden letters
+                    items.add(DisplayItem.Dot)
+                }
+            }
         }
     }
     
-    // If no letter found ahead, return the last one
-    return allLetters.lastOrNull() ?: "#"
+    return items
 }
