@@ -49,22 +49,23 @@ fun AlphabetScrubber(
     var touchY by remember { mutableStateOf(0f) }
     val density = LocalDensity.current
     
-    // Calculate display pattern based on screen height
+    // Calculate display pattern based on screen height with more conservative approach
     val displayPattern = remember(componentSize) {
         val availableHeight = componentSize.height
         if (availableHeight == 0) return@remember DisplayPattern(1, allLetters, emptySet())
         
-        // Be more aggressive - calculate space needed per item with more padding
-        // Account for font size, padding, and visual breathing room + dots
-        val minItemHeight = with(density) { 20.dp.toPx() }
-        val maxItemsToShow = (availableHeight / minItemHeight).toInt().coerceAtLeast(8)
+        // Much more conservative calculation to ensure letters are never cut off
+        // Account for font size, padding, touch target, and extra breathing room
+        val minItemHeight = with(density) { 28.dp.toPx() } // Increased significantly
+        val maxItemsToShow = (availableHeight / minItemHeight).toInt().coerceAtLeast(6)
         
         when {
-            maxItemsToShow >= 27 -> DisplayPattern(1, allLetters, emptySet()) // Show all
-            maxItemsToShow >= 18 -> DisplayPattern(2, allLetters, emptySet()) // Show every other
-            maxItemsToShow >= 13 -> DisplayPattern(3, allLetters, emptySet()) // Show every 3rd
-            maxItemsToShow >= 10 -> DisplayPattern(4, allLetters, emptySet()) // Show every 4th
-            else -> DisplayPattern(5, allLetters, emptySet()) // Show every 5th
+            maxItemsToShow >= 30 -> DisplayPattern(1, allLetters, emptySet()) // Show all - very tall screens
+            maxItemsToShow >= 22 -> DisplayPattern(2, allLetters, emptySet()) // Show every other
+            maxItemsToShow >= 15 -> DisplayPattern(3, allLetters, emptySet()) // Show every 3rd
+            maxItemsToShow >= 12 -> DisplayPattern(4, allLetters, emptySet()) // Show every 4th
+            maxItemsToShow >= 9 -> DisplayPattern(5, allLetters, emptySet()) // Show every 5th
+            else -> DisplayPattern(6, allLetters, emptySet()) // Show every 6th - very small screens
         }
     }
     
@@ -127,7 +128,7 @@ fun AlphabetScrubber(
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 8.dp, horizontal = 2.dp), // Increased padding for breathing room
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 displayItems.forEach { item ->
@@ -140,9 +141,10 @@ fun AlphabetScrubber(
                         when (item) {
                             is DisplayItem.Letter -> {
                                 val fontSize = when {
+                                    displayItems.size <= 10 -> 12.sp  // Fewer items = larger text
                                     displayItems.size <= 15 -> 11.sp
-                                    displayItems.size <= 25 -> 10.sp
-                                    else -> 9.sp
+                                    displayItems.size <= 20 -> 10.sp
+                                    else -> 8.sp // Never go below 8sp for readability
                                 }
                                 
                                 Text(
@@ -154,7 +156,9 @@ fun AlphabetScrubber(
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1, // Ensure single line
+                                    softWrap = false // Prevent text wrapping
                                 )
                             }
                             is DisplayItem.Dot -> {

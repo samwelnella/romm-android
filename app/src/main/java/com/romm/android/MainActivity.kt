@@ -131,6 +131,9 @@ fun GameListTopBar(
                 IconButton(onClick = { onSearchActiveChanged(true) }) {
                     Icon(Icons.Filled.Search, contentDescription = "Search")
                 }
+                IconButton(onClick = onSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                }
                 IconButton(onClick = { showBottomSheet = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "More options")
                 }
@@ -200,20 +203,6 @@ fun GameListTopBar(
                     }
                 }
                 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { 
-                            onSettings()
-                            showBottomSheet = false 
-                        }
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Settings, contentDescription = null)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("Settings")
-                }
                 
                 Spacer(modifier = Modifier.height(16.dp))
             }
