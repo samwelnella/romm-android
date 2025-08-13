@@ -264,7 +264,11 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             .build()
         
         // Use worker ID hash for consistent notification ID
-        return ForegroundInfo(this.hashCode(), notification)
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            ForegroundInfo(this.hashCode(), notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(this.hashCode(), notification)
+        }
     }
     
     /**

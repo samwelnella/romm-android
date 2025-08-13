@@ -35,6 +35,12 @@
             </intent-filter>
         </activity>
 
+        <!-- WorkManager foreground service for downloads -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <!-- Disable WorkManager auto-initialization -->
         <provider
             android:name="androidx.startup.InitializationProvider"
