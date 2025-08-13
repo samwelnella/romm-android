@@ -6,6 +6,8 @@ A modern Android app for browsing and downloading ROMs from your RomM server ins
 
 - 📱 Modern Material Design 3 UI
 - 🎮 Browse platforms and collections
+- 🔍 **Real-time search** with instant game filtering
+- 🔤 **Alphabet scrubber** for fast navigation through large game lists
 - 🎨 **Cover art display** for games in detail view
 - 📋 View detailed game information (regions, revisions, languages, tags)
 - ⬇️ Download individual games or bulk download entire platforms/collections
@@ -27,6 +29,9 @@ A modern Android app for browsing and downloading ROMs from your RomM server ins
 
 ### Game List View
 ![Platform Game List View](.screenshots/platform_gamelist_view.png)
+
+### Game List with Search & Alphabet Scrubber
+![Platform Game List with Filter](.screenshots/platform_gamelist_filter.png)
 
 ### Game Details with Cover Art
 ![Game Details View](.screenshots/game_details_view.png)
@@ -57,12 +62,16 @@ On first launch, configure your RomM server settings:
 1. Configure your RomM server connection in Settings
 2. Browse platforms or collections with **game controller** or touch navigation
 3. Select a platform/collection to view games (with **real-time loading progress** for large collections)
-4. View **game details with cover art** and download individual games
-5. Use the menu for bulk download options:
+4. **Search and Navigate** through game lists:
+   - Tap the **search icon** in the top bar for instant game filtering
+   - Use the **alphabet scrubber** on the right side to quickly jump to games starting with specific letters
+   - Search respects RomM's sorting logic (ignores articles like "The", "A", "An")
+5. View **game details with cover art** and download individual games
+6. Use the menu for bulk download options:
    - Download All Games
    - Download Missing Games (skips already downloaded)
    - Download Firmware (for platforms that have it)
-6. Downloads run in **foreground service** with persistent notifications showing progress
+7. Downloads run in **foreground service** with persistent notifications showing progress
 
 ## File Organization
 
