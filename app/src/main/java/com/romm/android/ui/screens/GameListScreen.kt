@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.romm.android.data.Game
+import com.romm.android.ui.components.AlphabetScrubber
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,69 +34,122 @@ fun GameListScreen(
     lazyListState: LazyListState = rememberLazyListState()
 ) {
     var showBottomSheet by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
     
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = { showBottomSheet = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+    // Create alphabet index for games
+    val gamesByLetter = remember(games) {
+        games.groupBy { game ->
+            val name = game.name ?: game.fs_name_no_ext
+            val firstChar = name.firstOrNull()?.uppercaseChar()
+            when {
+                firstChar == null -> "#"
+                firstChar.isLetter() -> firstChar.toString()
+                else -> "#"
+            }
+        }.toSortedMap()
+    }
+    
+    // Calculate item indices for each letter
+    val letterIndices = remember(games) {
+        val indices = mutableMapOf<String, Int>()
+        var currentIndex = 1 // Start at 1 to account for header item
+        
+        // Add loading item index if loading
+        if (isLoading) currentIndex++
+        
+        gamesByLetter.forEach { (letter, gamesForLetter) ->
+            indices[letter] = currentIndex
+            currentIndex += gamesForLetter.size
+        }
+        indices
+    }
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = lazyListState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 48.dp, top = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { showBottomSheet = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                    }
                 }
             }
-        }
-        
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+            
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (loadingProgress != null) {
-                            LinearProgressIndicator(
-                                progress = { loadingProgress.current.toFloat() / loadingProgress.total.toFloat() },
-                                modifier = Modifier.fillMaxWidth(0.8f)
-                            )
-                            Text(
-                                text = loadingProgress.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            CircularProgressIndicator()
-                            Text(
-                                text = "Loading games...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (loadingProgress != null) {
+                                LinearProgressIndicator(
+                                    progress = { loadingProgress.current.toFloat() / loadingProgress.total.toFloat() },
+                                    modifier = Modifier.fillMaxWidth(0.8f)
+                                )
+                                Text(
+                                    text = loadingProgress.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                CircularProgressIndicator()
+                                Text(
+                                    text = "Loading games...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
             }
+            
+            items(games) { game ->
+                GameCard(
+                    game = game,
+                    onClick = { onGameClick(game) }
+                )
+            }
         }
         
-        items(games) { game ->
-            GameCard(
-                game = game,
-                onClick = { onGameClick(game) }
+        // Alphabet scrubber positioned on the right side
+        if (games.isNotEmpty() && !isLoading) {
+            AlphabetScrubber(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .fillMaxHeight()
+                    .padding(
+                        end = 8.dp, 
+                        top = 16.dp, // Same as LazyColumn contentPadding.top
+                        bottom = 16.dp
+                    ),
+                onLetterSelected = { letter ->
+                    val targetIndex = letterIndices[letter]
+                    if (targetIndex != null) {
+                        coroutineScope.launch {
+                            lazyListState.animateScrollToItem(targetIndex)
+                        }
+                    }
+                }
             )
         }
     }
