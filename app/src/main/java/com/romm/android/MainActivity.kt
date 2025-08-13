@@ -269,7 +269,7 @@ fun RomMApp(viewModel: MainViewModel) {
                                 is Screen.Settings -> "Settings"
                                 is Screen.PlatformList -> "RomM Android"
                                 is Screen.CollectionList -> "Collections"
-                                is Screen.GameDetails -> "Game Details"
+                                is Screen.GameDetails -> screen.game.name ?: screen.game.fs_name_no_ext
                                 else -> "RomM Android"
                             })
                         },
