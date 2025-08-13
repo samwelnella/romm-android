@@ -73,123 +73,124 @@ fun AlphabetScrubber(
         buildDisplayItems(allLetters, displayPattern.step)
     }
     
-    Box(
-        modifier = modifier
-            .width(32.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                if (isDragging) {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                }
-            )
-            .onGloballyPositioned { coordinates ->
-                componentSize = coordinates.size
-            }
-            .pointerInput(Unit) {
-                var currentY = 0f
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        isDragging = true
-                        currentY = offset.y
-                        touchY = offset.y
-                        // Map position to full alphabet, not just displayed items
-                        val letterIndex = calculateLetterIndex(currentY, componentSize.height, allLetters.size)
-                        val letter = allLetters.getOrNull(letterIndex)
-                        if (letter != null) {
-                            selectedLetter = letter
-                            onLetterSelected(letter)
-                        }
-                    },
-                    onDragEnd = {
-                        isDragging = false
-                        selectedLetter = null
-                    },
-                    onDrag = { _, dragAmount ->
-                        // Update current position
-                        currentY += dragAmount.y
-                        currentY = currentY.coerceIn(0f, componentSize.height.toFloat())
-                        touchY = currentY
-                        // Map position to full alphabet, not just displayed items
-                        val letterIndex = calculateLetterIndex(currentY, componentSize.height, allLetters.size)
-                        val letter = allLetters.getOrNull(letterIndex)
-                        if (letter != null && letter != selectedLetter) {
-                            selectedLetter = letter
-                            onLetterSelected(letter)
-                        }
+    Box(modifier = modifier) {
+        // The scrubber bar
+        Box(
+            modifier = Modifier
+                .width(32.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (isDragging) {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
                     }
                 )
-            }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            displayItems.forEach { item ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when (item) {
-                        is DisplayItem.Letter -> {
-                            val fontSize = when {
-                                displayItems.size <= 15 -> 11.sp
-                                displayItems.size <= 25 -> 10.sp
-                                else -> 9.sp
+                .onGloballyPositioned { coordinates ->
+                    componentSize = coordinates.size
+                }
+                .pointerInput(Unit) {
+                    var currentY = 0f
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            isDragging = true
+                            currentY = offset.y
+                            touchY = offset.y
+                            // Map position to full alphabet, not just displayed items
+                            val letterIndex = calculateLetterIndex(currentY, componentSize.height, allLetters.size)
+                            val letter = allLetters.getOrNull(letterIndex)
+                            if (letter != null) {
+                                selectedLetter = letter
+                                onLetterSelected(letter)
                             }
-                            
-                            Text(
-                                text = item.letter,
-                                fontSize = fontSize,
-                                fontWeight = if (item.letter == selectedLetter) FontWeight.Bold else FontWeight.Normal,
-                                color = if (item.letter == selectedLetter) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                textAlign = TextAlign.Center
-                            )
+                        },
+                        onDragEnd = {
+                            isDragging = false
+                            selectedLetter = null
+                        },
+                        onDrag = { _, dragAmount ->
+                            // Update current position
+                            currentY += dragAmount.y
+                            currentY = currentY.coerceIn(0f, componentSize.height.toFloat())
+                            touchY = currentY
+                            // Map position to full alphabet, not just displayed items
+                            val letterIndex = calculateLetterIndex(currentY, componentSize.height, allLetters.size)
+                            val letter = allLetters.getOrNull(letterIndex)
+                            if (letter != null && letter != selectedLetter) {
+                                selectedLetter = letter
+                                onLetterSelected(letter)
+                            }
                         }
-                        is DisplayItem.Dot -> {
-                            Box(
-                                modifier = Modifier
-                                    .size(3.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        androidx.compose.foundation.shape.CircleShape
-                                    )
-                            )
+                    )
+                }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                displayItems.forEach { item ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when (item) {
+                            is DisplayItem.Letter -> {
+                                val fontSize = when {
+                                    displayItems.size <= 15 -> 11.sp
+                                    displayItems.size <= 25 -> 10.sp
+                                    else -> 9.sp
+                                }
+                                
+                                Text(
+                                    text = item.letter,
+                                    fontSize = fontSize,
+                                    fontWeight = if (item.letter == selectedLetter) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (item.letter == selectedLetter) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            is DisplayItem.Dot -> {
+                                Box(
+                                    modifier = Modifier
+                                        .size(3.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            androidx.compose.foundation.shape.CircleShape
+                                        )
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
-    
-    // Show touch feedback bubble when dragging
-    if (isDragging && selectedLetter != null) {
-        val bubbleOffsetY = with(density) { touchY.toDp() } - 24.dp // Center the bubble on touch position
         
-        Box(
-            modifier = Modifier
-                .offset(x = (-72).dp, y = bubbleOffsetY)
-                .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.primary)
-                .zIndex(10f), // Ensure it appears above the game list
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = selectedLetter!!,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
+        // Touch feedback bubble - positioned relative to the scrubber
+        if (isDragging && selectedLetter != null) {
+            Box(
+                modifier = Modifier
+                    .offset(x = (-60).dp, y = with(density) { touchY.toDp() - 24.dp })
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = selectedLetter!!,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     }
 }
