@@ -91,10 +91,14 @@ class RomMApiService @Inject constructor(
         lastSettings = settings
         
         val authInterceptor = Interceptor { chain ->
-            val credential = Credentials.basic(settings.username, settings.password)
-            val request = chain.request().newBuilder()
-                .header("Authorization", credential)
-                .build()
+            val request = if (settings.username.isNotEmpty() || settings.password.isNotEmpty()) {
+                val credential = Credentials.basic(settings.username, settings.password)
+                chain.request().newBuilder()
+                    .header("Authorization", credential)
+                    .build()
+            } else {
+                chain.request()
+            }
             chain.proceed(request)
         }
         
