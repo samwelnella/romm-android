@@ -33,7 +33,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 fun GameDetailsScreen(
     game: Game,
     onDownload: (Game) -> Unit,
-    onBack: () -> Unit,
     hostUrl: String = "",
     username: String = "",
     password: String = ""
@@ -43,21 +42,6 @@ fun GameDetailsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Text(
-                    game.name ?: game.fs_name_no_ext,
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
         
         item {
             Row(

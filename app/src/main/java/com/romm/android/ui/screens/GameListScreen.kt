@@ -24,18 +24,11 @@ fun GameListScreen(
     games: List<Game>,
     isLoading: Boolean,
     loadingProgress: com.romm.android.LoadingProgress? = null,
-    title: String,
     onGameClick: (Game) -> Unit,
-    onDownloadAll: () -> Unit,
-    onDownloadMissing: () -> Unit,
-    onDownloadFirmware: (() -> Unit)?,
-    onBack: () -> Unit,
     onRefresh: () -> Unit,
-    lazyListState: LazyListState = rememberLazyListState()
+    lazyListState: LazyListState = rememberLazyListState(),
+    searchQuery: String = "" // Search query passed from TopBar
 ) {
-    var showBottomSheet by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchActive by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     
     // Filter games based on search query
@@ -67,10 +60,7 @@ fun GameListScreen(
     // Calculate item indices for each letter by walking through filteredGames in order
     val letterIndices = remember(filteredGames, isLoading) {
         val indices = mutableMapOf<String, Int>()
-        var currentIndex = 1 // Start at 1 to account for header item
-        
-        // Add search bar item
-        currentIndex++
+        var currentIndex = 0 // Start at 0 since headers are outside LazyColumn
         
         // Add loading item index if loading
         if (isLoading) currentIndex++
@@ -95,76 +85,13 @@ fun GameListScreen(
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
+        // Game list - now takes full height since header is in TopBar
         LazyColumn(
             state = lazyListState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 48.dp, top = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (!isSearchActive) {
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search")
-                        }
-                    }
-                    IconButton(onClick = { showBottomSheet = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More options")
-                    }
-                }
-            }
-            
-            item {
-                if (isSearchActive) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search games...") },
-                            leadingIcon = {
-                                Icon(Icons.Filled.Search, contentDescription = null)
-                            },
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Filled.Clear, contentDescription = "Clear")
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { 
-                            isSearchActive = false
-                            searchQuery = ""
-                        }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close search")
-                        }
-                    }
-                } else if (searchQuery.isNotEmpty()) {
-                    // Show search summary when search is not active but has results
-                    Text(
-                        text = "Showing ${filteredGames.size} of ${games.size} games",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-                }
-            }
             
             if (isLoading) {
                 item {
@@ -243,19 +170,13 @@ fun GameListScreen(
         // Alphabet scrubber positioned on the right side
         // Hide scrubber during search or when no filtered games
         if (filteredGames.isNotEmpty() && !isLoading && searchQuery.isEmpty()) {
-            val topPadding = if (isSearchActive || searchQuery.isNotEmpty()) {
-                16.dp + 56.dp + 56.dp + 16.dp // header + search bar + spacing
-            } else {
-                16.dp + 56.dp + 8.dp // header + spacing
-            }
-            
             AlphabetScrubber(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .fillMaxHeight()
                     .padding(
                         end = 8.dp, 
-                        top = topPadding,
+                        top = 16.dp, // Just top padding since no header
                         bottom = 16.dp
                     ),
                 onLetterSelected = { letter ->
@@ -271,72 +192,6 @@ fun GameListScreen(
                     }
                 }
             )
-        }
-    }
-    
-    if (showBottomSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false }
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    "Download Options",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { 
-                            onDownloadAll()
-                            showBottomSheet = false 
-                        }
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Download, contentDescription = null)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("Download All Games")
-                }
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { 
-                            onDownloadMissing()
-                            showBottomSheet = false 
-                        }
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.GetApp, contentDescription = null)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("Download Missing Games")
-                }
-                
-                if (onDownloadFirmware != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { 
-                                onDownloadFirmware()
-                                showBottomSheet = false 
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Memory, contentDescription = null)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Download Firmware")
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-            }
         }
     }
 }

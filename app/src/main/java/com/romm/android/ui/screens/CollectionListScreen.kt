@@ -21,7 +21,6 @@ fun CollectionListScreen(
     collections: List<Collection>,
     isLoading: Boolean,
     onCollectionClick: (Collection) -> Unit,
-    onBack: () -> Unit,
     onRefresh: () -> Unit,
     lazyListState: LazyListState = rememberLazyListState()
 ) {
@@ -31,20 +30,6 @@ fun CollectionListScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Text(
-                    "Collections",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-            }
-        }
         
         if (isLoading) {
             item {

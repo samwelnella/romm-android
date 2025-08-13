@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -75,6 +76,153 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun GameListTopBar(
+    title: String,
+    searchQuery: String,
+    isSearchActive: Boolean,
+    onSearchQueryChanged: (String) -> Unit,
+    onSearchActiveChanged: (Boolean) -> Unit,
+    onBack: () -> Unit,
+    onDownloadAll: () -> Unit,
+    onDownloadMissing: () -> Unit,
+    onDownloadFirmware: (() -> Unit)?,
+    onSettings: () -> Unit
+) {
+    var showBottomSheet by remember { mutableStateOf(false) }
+    
+    if (isSearchActive) {
+        // Search mode top bar
+        TopAppBar(
+            title = {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChanged,
+                    placeholder = { Text("Search games...") },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Search, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onSearchQueryChanged("") }) {
+                                Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            navigationIcon = {
+                IconButton(onClick = { onSearchActiveChanged(false) }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close search")
+                }
+            }
+        )
+    } else {
+        // Normal mode top bar
+        TopAppBar(
+            title = { Text(title) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                }
+            },
+            actions = {
+                IconButton(onClick = { onSearchActiveChanged(true) }) {
+                    Icon(Icons.Filled.Search, contentDescription = "Search")
+                }
+                IconButton(onClick = { showBottomSheet = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                }
+            }
+        )
+    }
+    
+    // Bottom sheet for download options
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false }
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Download Options",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { 
+                            onDownloadAll()
+                            showBottomSheet = false 
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Download, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Download All Games")
+                }
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { 
+                            onDownloadMissing()
+                            showBottomSheet = false 
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.GetApp, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Download Missing Games")
+                }
+                
+                if (onDownloadFirmware != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { 
+                                onDownloadFirmware()
+                                showBottomSheet = false 
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Memory, contentDescription = null)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Download Firmware")
+                    }
+                }
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { 
+                            onSettings()
+                            showBottomSheet = false 
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Settings, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Settings")
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun RomMApp(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     
@@ -99,14 +247,49 @@ fun RomMApp(viewModel: MainViewModel) {
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("RomM Android") },
-                actions = {
-                    IconButton(onClick = { viewModel.showSettings() }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                    }
+            when (val screen = uiState.currentScreen) {
+                is Screen.GameList -> {
+                    GameListTopBar(
+                        title = screen.title,
+                        searchQuery = uiState.searchQuery,
+                        isSearchActive = uiState.isSearchActive,
+                        onSearchQueryChanged = viewModel::updateSearchQuery,
+                        onSearchActiveChanged = viewModel::setSearchActive,
+                        onBack = viewModel::goBack,
+                        onDownloadAll = { viewModel.downloadAllGames(screen.platformId, screen.collectionId) },
+                        onDownloadMissing = { viewModel.downloadMissingGames(screen.platformId, screen.collectionId) },
+                        onDownloadFirmware = screen.platformId?.let { { viewModel.downloadFirmware(it) } },
+                        onSettings = viewModel::showSettings
+                    )
                 }
-            )
+                else -> {
+                    TopAppBar(
+                        title = { 
+                            Text(when (screen) {
+                                is Screen.Settings -> "Settings"
+                                is Screen.PlatformList -> "RomM Android"
+                                is Screen.CollectionList -> "Collections"
+                                is Screen.GameDetails -> "Game Details"
+                                else -> "RomM Android"
+                            })
+                        },
+                        navigationIcon = {
+                            if (screen !is Screen.PlatformList) {
+                                IconButton(onClick = viewModel::goBack) {
+                                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                                }
+                            }
+                        },
+                        actions = {
+                            if (screen !is Screen.Settings) {
+                                IconButton(onClick = { viewModel.showSettings() }) {
+                                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                                }
+                            }
+                        }
+                    )
+                }
+            }
         },
         floatingActionButton = {
             if (uiState.currentScreen is Screen.PlatformList || uiState.currentScreen is Screen.CollectionList) {
@@ -127,8 +310,7 @@ fun RomMApp(viewModel: MainViewModel) {
                 is Screen.Settings -> {
                     SettingsScreen(
                         settings = uiState.settings,
-                        onSettingsChanged = viewModel::updateSettings,
-                        onBack = viewModel::goBack
+                        onSettingsChanged = viewModel::updateSettings
                     )
                 }
                 is Screen.PlatformList -> {
@@ -194,7 +376,6 @@ fun RomMApp(viewModel: MainViewModel) {
                             viewModel.saveScrollState(screen.getScrollKey(), collectionListState.firstVisibleItemIndex)
                             viewModel.selectCollection(collection)
                         },
-                        onBack = viewModel::goBack,
                         onRefresh = viewModel::refreshData,
                         lazyListState = collectionListState
                     )
@@ -228,16 +409,12 @@ fun RomMApp(viewModel: MainViewModel) {
                         games = uiState.games,
                         isLoading = uiState.isLoading,
                         loadingProgress = uiState.loadingProgress,
-                        title = screen.title,
+                        searchQuery = uiState.searchQuery,
                         onGameClick = { game ->
                             // Save scroll state before navigating
                             viewModel.saveScrollState(scrollKey, gameListState.firstVisibleItemIndex)
                             viewModel.selectGame(game)
                         },
-                        onDownloadAll = { viewModel.downloadAllGames(screen.platformId, screen.collectionId) },
-                        onDownloadMissing = { viewModel.downloadMissingGames(screen.platformId, screen.collectionId) },
-                        onDownloadFirmware = screen.platformId?.let { { viewModel.downloadFirmware(it) } },
-                        onBack = viewModel::goBack,
                         onRefresh = { viewModel.refreshGames(screen.platformId, screen.collectionId) },
                         lazyListState = gameListState
                     )
@@ -246,7 +423,6 @@ fun RomMApp(viewModel: MainViewModel) {
                     GameDetailsScreen(
                         game = screen.game,
                         onDownload = viewModel::downloadGame,
-                        onBack = viewModel::goBack,
                         hostUrl = uiState.settings.host,
                         username = uiState.settings.username,
                         password = uiState.settings.password
@@ -295,7 +471,9 @@ data class UiState(
     val loadingProgress: LoadingProgress? = null,
     val error: String? = null,
     val successMessage: String? = null,
-    val settings: AppSettings = AppSettings()
+    val settings: AppSettings = AppSettings(),
+    val searchQuery: String = "", // Search query for game list
+    val isSearchActive: Boolean = false // Whether search mode is active
 )
 
 sealed class Screen {
@@ -694,5 +872,17 @@ class MainViewModel @Inject constructor(
     
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+    
+    fun updateSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+    }
+    
+    fun setSearchActive(active: Boolean) {
+        _uiState.value = _uiState.value.copy(isSearchActive = active)
+        if (!active) {
+            // Clear search when closing
+            _uiState.value = _uiState.value.copy(searchQuery = "")
+        }
     }
 }

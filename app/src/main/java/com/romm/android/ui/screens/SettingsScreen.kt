@@ -30,8 +30,7 @@ import com.romm.android.data.AppSettings
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
-    onSettingsChanged: (AppSettings) -> Unit,
-    onBack: () -> Unit
+    onSettingsChanged: (AppSettings) -> Unit
 ) {
     var currentSettings by remember { mutableStateOf(settings) }
     val context = LocalContext.current
@@ -60,19 +59,6 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Back button
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                "Settings",
-                style = MaterialTheme.typography.headlineMedium
-            )
-        }
         
         Card {
             Column(
@@ -215,8 +201,7 @@ fun SettingsScreen(
             onClick = { 
                 try {
                     onSettingsChanged(currentSettings)
-                    // Exit settings screen after successful save
-                    onBack()
+                    // Settings saved - navigation will be handled by the ViewModel/TopAppBar
                 } catch (e: Exception) {
                     // If there's an error, stay on settings screen
                     // Error will be shown via the existing error handling
