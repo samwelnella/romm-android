@@ -73,19 +73,18 @@ fun AlphabetScrubber(
         buildDisplayItems(allLetters, displayPattern.step)
     }
     
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+            .width(32.dp) // Fixed width for the entire component
+            .fillMaxHeight()
+    ) {
         // The scrubber bar
         Box(
             modifier = Modifier
-                .width(32.dp)
-                .fillMaxHeight()
+                .fillMaxSize()
                 .clip(RoundedCornerShape(16.dp))
                 .background(
-                    if (isDragging) {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                    }
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
                 )
                 .onGloballyPositioned { coordinates ->
                     componentSize = coordinates.size
@@ -174,14 +173,15 @@ fun AlphabetScrubber(
             }
         }
         
-        // Touch feedback bubble - positioned relative to the scrubber
+        // Touch feedback bubble - positioned well to the left of the scrubber
         if (isDragging && selectedLetter != null) {
             Box(
                 modifier = Modifier
-                    .offset(x = (-60).dp, y = with(density) { touchY.toDp() - 24.dp })
+                    .offset(x = (-80).dp, y = with(density) { touchY.toDp() - 24.dp })
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primary),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .zIndex(1f), // Slight elevation to ensure visibility
                 contentAlignment = Alignment.Center
             ) {
                 Text(
