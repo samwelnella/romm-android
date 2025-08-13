@@ -50,11 +50,12 @@ fun GameListScreen(
         }
     }
     
-    // Create alphabet index for filtered games
+    // Create alphabet index for filtered games (matching RomM's sorting logic)
     val gamesByLetter = remember(filteredGames) {
         filteredGames.groupBy { game ->
             val name = game.name ?: game.fs_name_no_ext
-            val firstChar = name.firstOrNull()?.uppercaseChar()
+            val sortableName = removeSortingArticles(name)
+            val firstChar = sortableName.firstOrNull()?.uppercaseChar()
             when {
                 firstChar == null -> "#"
                 firstChar.isLetter() -> firstChar.toString()
@@ -77,7 +78,8 @@ fun GameListScreen(
         // Walk through games in the order they appear in the LazyColumn
         filteredGames.forEachIndexed { gameIndex, game ->
             val name = game.name ?: game.fs_name_no_ext
-            val firstChar = name.firstOrNull()?.uppercaseChar()
+            val sortableName = removeSortingArticles(name)
+            val firstChar = sortableName.firstOrNull()?.uppercaseChar()
             val letter = when {
                 firstChar == null -> "#"
                 firstChar.isLetter() -> firstChar.toString()
@@ -409,4 +411,21 @@ fun GameCard(
             }
         }
     }
+}
+
+/**
+ * Remove common articles from the beginning of game names for proper alphabetical sorting
+ * This matches the server-side sorting logic used by RomM
+ */
+private fun removeSortingArticles(name: String): String {
+    val trimmedName = name.trim()
+    val articlesToRemove = listOf("The ", "A ", "An ")
+    
+    for (article in articlesToRemove) {
+        if (trimmedName.startsWith(article, ignoreCase = true)) {
+            return trimmedName.substring(article.length).trim()
+        }
+    }
+    
+    return trimmedName
 }
