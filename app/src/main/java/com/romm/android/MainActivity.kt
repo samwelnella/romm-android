@@ -523,6 +523,9 @@ class MainViewModel @Inject constructor(
                 // Show success message
                 _uiState.value = _uiState.value.copy(successMessage = "Settings saved successfully!")
                 
+                // Navigate back to previous screen after successful save
+                goBack()
+                
                 // Clear success message after 3 seconds
                 kotlinx.coroutines.delay(3000)
                 if (_uiState.value.successMessage == "Settings saved successfully!") {

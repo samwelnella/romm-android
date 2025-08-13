@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.romm.android.data.AppSettings
 
@@ -150,7 +151,7 @@ fun SettingsScreen(
                     )
                 }
                 
-                // Clean number picker interface
+                // Responsive inline number picker interface
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -158,7 +159,8 @@ fun SettingsScreen(
                 ) {
                     Text(
                         "Max Concurrent Downloads:",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f, fill = false) // Take only needed space
                     )
                     
                     Row(
@@ -171,15 +173,17 @@ fun SettingsScreen(
                                     currentSettings = currentSettings.copy(maxConcurrentDownloads = currentSettings.maxConcurrentDownloads - 1)
                                 }
                             },
-                            enabled = currentSettings.maxConcurrentDownloads > 1
+                            enabled = currentSettings.maxConcurrentDownloads > 1,
+                            modifier = Modifier.widthIn(min = 40.dp) // Minimum width but can expand
                         ) {
                             Text("-")
                         }
                         
                         Text(
                             text = currentSettings.maxConcurrentDownloads.toString(),
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            style = MaterialTheme.typography.headlineSmall
+                            modifier = Modifier.widthIn(min = 24.dp),
+                            style = MaterialTheme.typography.headlineSmall,
+                            textAlign = TextAlign.Center
                         )
                         
                         Button(
@@ -188,7 +192,8 @@ fun SettingsScreen(
                                     currentSettings = currentSettings.copy(maxConcurrentDownloads = currentSettings.maxConcurrentDownloads + 1)
                                 }
                             },
-                            enabled = currentSettings.maxConcurrentDownloads < 10
+                            enabled = currentSettings.maxConcurrentDownloads < 10,
+                            modifier = Modifier.widthIn(min = 40.dp) // Minimum width but can expand
                         ) {
                             Text("+")
                         }
