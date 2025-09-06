@@ -52,6 +52,31 @@ interface RomMApi {
     
     @GET("api/raw/assets/{path}")
     suspend fun getCoverImage(@Path("path", encoded = true) path: String): Response<ResponseBody>
+    
+    @GET("api/saves")
+    suspend fun getSaves(
+        @Query("rom_id") romId: Int? = null,
+        @Query("platform_id") platformId: Int? = null
+    ): List<SaveFile>
+    
+    @GET("api/saves/{id}")
+    suspend fun getSave(@Path("id") id: Int): SaveFile
+    
+    @Streaming
+    @GET("api/raw/assets/{path}")
+    suspend fun downloadAsset(
+        @Path("path", encoded = true) path: String
+    ): Response<ResponseBody>
+    
+    @GET("api/states")
+    suspend fun getStates(
+        @Query("rom_id") romId: Int? = null,
+        @Query("platform_id") platformId: Int? = null
+    ): List<SaveState>
+    
+    @GET("api/states/{id}")
+    suspend fun getState(@Path("id") id: Int): SaveState
+    
 }
 
 data class GameResponse(
@@ -199,5 +224,53 @@ class RomMApiService @Inject constructor(
     
     suspend fun getCoverImage(path: String): Response<ResponseBody> {
         return getApi().getCoverImage(path)
+    }
+    
+    suspend fun getSaves(
+        romId: Int? = null,
+        platformId: Int? = null,
+        onProgress: ((current: Int, total: Int) -> Unit)? = null
+    ): List<SaveFile> {
+        val saves = getApi().getSaves(
+            romId = romId,
+            platformId = platformId
+        )
+        onProgress?.invoke(saves.size, saves.size)
+        return saves
+    }
+    
+    suspend fun getSave(id: Int): SaveFile {
+        return getApi().getSave(id)
+    }
+    
+    suspend fun downloadSaveFile(saveFile: com.romm.android.data.SaveFile): Response<ResponseBody> {
+        // The download_path already includes /api/raw/assets/, so we need to strip that prefix
+        val assetPath = saveFile.download_path?.removePrefix("/api/raw/assets/") 
+            ?: saveFile.file_path
+        return getApi().downloadAsset(assetPath)
+    }
+    
+    suspend fun getStates(
+        romId: Int? = null,
+        platformId: Int? = null,
+        onProgress: ((current: Int, total: Int) -> Unit)? = null
+    ): List<SaveState> {
+        val states = getApi().getStates(
+            romId = romId,
+            platformId = platformId
+        )
+        onProgress?.invoke(states.size, states.size)
+        return states
+    }
+    
+    suspend fun getState(id: Int): SaveState {
+        return getApi().getState(id)
+    }
+    
+    suspend fun downloadSaveState(saveState: com.romm.android.data.SaveState): Response<ResponseBody> {
+        // The download_path already includes /api/raw/assets/, so we need to strip that prefix
+        val assetPath = saveState.download_path?.removePrefix("/api/raw/assets/") 
+            ?: saveState.file_path
+        return getApi().downloadAsset(assetPath)
     }
 }

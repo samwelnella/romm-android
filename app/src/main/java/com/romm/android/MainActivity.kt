@@ -24,6 +24,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.romm.android.data.*
+import com.romm.android.ui.screens.PlatformSaveFiles
+import com.romm.android.ui.screens.PlatformSaveStates
+import com.romm.android.ui.screens.GameWithSaves
+import com.romm.android.ui.screens.GameWithStates
 import com.romm.android.network.RomMApiService
 import com.romm.android.ui.theme.RomMTheme
 import com.romm.android.ui.components.*
@@ -334,6 +338,16 @@ fun RomMApp(viewModel: MainViewModel) {
                             viewModel.saveScrollState(screen.getScrollKey(), platformListState.firstVisibleItemIndex)
                             viewModel.showCollections()
                         },
+                        onSaveFilesClick = {
+                            // Save scroll state before navigating
+                            viewModel.saveScrollState(screen.getScrollKey(), platformListState.firstVisibleItemIndex)
+                            viewModel.showSaveFiles()
+                        },
+                        onSaveStatesClick = {
+                            // Save scroll state before navigating
+                            viewModel.saveScrollState(screen.getScrollKey(), platformListState.firstVisibleItemIndex)
+                            viewModel.showSaveStates()
+                        },
                         onRefresh = viewModel::refreshData,
                         lazyListState = platformListState
                     )
@@ -417,6 +431,88 @@ fun RomMApp(viewModel: MainViewModel) {
                         password = uiState.settings.password
                     )
                 }
+                is Screen.SaveFilesList -> {
+                    SaveFilesScreen(
+                        platforms = uiState.saveFilesPlatforms,
+                        isLoading = uiState.isLoading,
+                        onPlatformClick = { platform ->
+                            viewModel.navigateToSaveFilesDetail(platform)
+                        },
+                        onRefresh = viewModel::refreshData,
+                        onDownloadAllSaves = {
+                            viewModel.downloadAllSaveFiles()
+                        }
+                    )
+                }
+                is Screen.SaveStatesList -> {
+                    SaveStatesScreen(
+                        platforms = uiState.saveStatesPlatforms,
+                        isLoading = uiState.isLoading,
+                        onPlatformClick = { platform ->
+                            viewModel.navigateToSaveStatesDetail(platform)
+                        },
+                        onRefresh = viewModel::refreshData,
+                        onDownloadAllStates = {
+                            viewModel.downloadAllSaveStates()
+                        }
+                    )
+                }
+                is Screen.SaveFilesDetail -> {
+                    SaveFileDetailScreen(
+                        platform = screen.platform,
+                        games = uiState.saveFilesForPlatform,
+                        isLoading = uiState.isLoading,
+                        onGameClick = { game -> 
+                            viewModel.navigateToGameSaveFiles(game)
+                        },
+                        onDownloadPlatformSaves = {
+                            viewModel.downloadPlatformSaveFiles(screen.platform)
+                        },
+                        onRefresh = { viewModel.refreshData() }
+                    )
+                }
+                is Screen.SaveStatesDetail -> {
+                    SaveStateDetailScreen(
+                        platform = screen.platform,
+                        games = uiState.saveStatesForPlatform,
+                        isLoading = uiState.isLoading,
+                        onGameClick = { game -> 
+                            viewModel.navigateToGameSaveStates(game)
+                        },
+                        onDownloadPlatformStates = {
+                            viewModel.downloadPlatformSaveStates(screen.platform)
+                        },
+                        onRefresh = { viewModel.refreshData() }
+                    )
+                }
+                is Screen.GameSaveFiles -> {
+                    GameSaveFileListScreen(
+                        game = screen.game,
+                        saves = uiState.gameSaves,
+                        isLoading = uiState.isLoading,
+                        onSaveFileClick = { saveFile ->
+                            viewModel.downloadSingleSaveFile(saveFile)
+                        },
+                        onDownloadGameSaves = {
+                            viewModel.downloadGameSaveFiles(screen.game)
+                        },
+                        onRefresh = { viewModel.refreshData() }
+                    )
+                }
+                is Screen.GameSaveStates -> {
+                    GameSaveStateListScreen(
+                        game = screen.game,
+                        states = uiState.gameStates,
+                        isLoading = uiState.isLoading,
+                        onSaveStateClick = { saveState ->
+                            viewModel.downloadSingleSaveState(saveState)
+                        },
+                        onDownloadGameStates = {
+                            viewModel.downloadGameSaveStates(screen.game)
+                        },
+                        onRefresh = { viewModel.refreshData() }
+                    )
+                }
             }
             
             // Show error messages
@@ -454,6 +550,14 @@ data class UiState(
     val collections: List<com.romm.android.data.Collection> = emptyList(), // Fully qualified name
     val games: List<Game> = emptyList(),
     val cachedGames: Map<String, List<Game>> = emptyMap(), // Cache games by platformId or collectionId
+    val saveFiles: List<SaveFile> = emptyList(),
+    val saveStates: List<SaveState> = emptyList(),
+    val saveFilesPlatforms: List<PlatformSaveFiles> = emptyList(),
+    val saveStatesPlatforms: List<PlatformSaveStates> = emptyList(),
+    val saveStatesForPlatform: List<GameWithStates> = emptyList(),
+    val saveFilesForPlatform: List<GameWithSaves> = emptyList(),
+    val gameStates: List<SaveState> = emptyList(),
+    val gameSaves: List<SaveFile> = emptyList(),
     val scrollStates: Map<String, Int> = emptyMap(), // Cache scroll positions by screen key
     val isNavigatingBack: Boolean = false, // Track if we're navigating back vs forward
     val isLoading: Boolean = false,
@@ -469,12 +573,18 @@ sealed class Screen {
     object Settings : Screen()
     object PlatformList : Screen()
     object CollectionList : Screen()
+    object SaveFilesList : Screen()
+    object SaveStatesList : Screen()
     data class GameList(
         val title: String,
         val platformId: Int? = null,
         val collectionId: Int? = null
     ) : Screen()
     data class GameDetails(val game: Game) : Screen()
+    data class SaveFilesDetail(val platform: Platform) : Screen()
+    data class SaveStatesDetail(val platform: Platform) : Screen()
+    data class GameSaveFiles(val game: Game) : Screen()
+    data class GameSaveStates(val game: Game) : Screen()
     
     // Generate unique keys for scroll state caching
     fun getScrollKey(): String {
@@ -482,12 +592,18 @@ sealed class Screen {
             is Settings -> "settings"
             is PlatformList -> "platform_list"
             is CollectionList -> "collection_list"
+            is SaveFilesList -> "save_files_list"
+            is SaveStatesList -> "save_states_list"
             is GameList -> when {
                 platformId != null -> "game_list_platform_$platformId"
                 collectionId != null -> "game_list_collection_$collectionId"
                 else -> "game_list_unknown"
             }
             is GameDetails -> "game_details_${game.id}"
+            is SaveFilesDetail -> "save_files_detail_${platform.id}"
+            is SaveStatesDetail -> "save_states_detail_${platform.id}"
+            is GameSaveFiles -> "game_save_files_${game.id}"
+            is GameSaveStates -> "game_save_states_${game.id}"
         }
     }
 }
@@ -516,12 +632,17 @@ class MainViewModel @Inject constructor(
     
     fun updateSettings(settings: AppSettings) {
         Log.d("MainViewModel", "Updating settings: $settings")
+        Log.d("MainViewModel", "Save files directory: ${settings.saveFilesDirectory}")
+        Log.d("MainViewModel", "Save states directory: ${settings.saveStatesDirectory}")
         viewModelScope.launch {
             try {
                 settingsRepository.updateSettings(settings)
                 
-                // Show success message
-                _uiState.value = _uiState.value.copy(successMessage = "Settings saved successfully!")
+                // Update UI state immediately with the new settings
+                _uiState.value = _uiState.value.copy(
+                    settings = settings,
+                    successMessage = "Settings saved successfully!"
+                )
                 
                 // Navigate back to previous screen after successful save
                 goBack()
@@ -606,6 +727,12 @@ class MainViewModel @Inject constructor(
                     }
                     cacheKey?.let { currentState.cachedGames[it] }
                 }
+                is Screen.SaveFilesList -> null
+                is Screen.SaveStatesList -> null
+                is Screen.SaveFilesDetail -> null
+                is Screen.SaveStatesDetail -> null
+                is Screen.GameSaveFiles -> null
+                is Screen.GameSaveStates -> null
                 else -> null
             }
             
@@ -621,6 +748,24 @@ class MainViewModel @Inject constructor(
                 when (previousScreen) {
                     is Screen.GameList -> {
                         refreshGames(previousScreen.platformId, previousScreen.collectionId)
+                    }
+                    is Screen.SaveFilesList -> {
+                        // TODO: Implement save files refresh
+                    }
+                    is Screen.SaveStatesList -> {
+                        // TODO: Implement save states refresh
+                    }
+                    is Screen.SaveFilesDetail -> {
+                        // TODO: Implement save files detail refresh
+                    }
+                    is Screen.SaveStatesDetail -> {
+                        // TODO: Implement save states detail refresh
+                    }
+                    is Screen.GameSaveFiles -> {
+                        // TODO: Implement game save files refresh
+                    }
+                    is Screen.GameSaveStates -> {
+                        // TODO: Implement game save states refresh
                     }
                     else -> { /* No additional loading needed */ }
                 }
@@ -664,6 +809,12 @@ class MainViewModel @Inject constructor(
             }
             is Screen.Settings -> { /* No refresh needed for settings */ }
             is Screen.GameDetails -> { /* No refresh needed for game details */ }
+            is Screen.SaveFilesList -> loadSaveFiles()
+            is Screen.SaveStatesList -> loadSaveStates()
+            is Screen.SaveFilesDetail -> { /* TODO: Implement save files detail refresh */ }
+            is Screen.SaveStatesDetail -> { /* TODO: Implement save states detail refresh */ }
+            is Screen.GameSaveFiles -> { /* TODO: Implement game save files refresh */ }
+            is Screen.GameSaveStates -> { /* TODO: Implement game save states refresh */ }
         }
     }
     
@@ -875,6 +1026,482 @@ class MainViewModel @Inject constructor(
         if (!active) {
             // Clear search when closing
             _uiState.value = _uiState.value.copy(searchQuery = "")
+        }
+    }
+    
+    fun showSaveFiles() {
+        navigateToScreen(Screen.SaveFilesList)
+        loadSaveFiles()
+    }
+    
+    fun showSaveStates() {
+        navigateToScreen(Screen.SaveStatesList)
+        loadSaveStates()
+    }
+    
+    fun navigateToSaveFilesDetail(platform: Platform) {
+        navigateToScreen(Screen.SaveFilesDetail(platform))
+        loadSaveFilesForPlatform(platform)
+    }
+    
+    private fun loadSaveFilesForPlatform(platform: Platform) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                // Try getting all saves first, then filter client-side
+                Log.d("MainViewModel", "Loading all save files to filter for platform ${platform.display_name}")
+                val allSaves = apiService.getSaves()
+                Log.d("MainViewModel", "Found ${allSaves.size} total save files")
+                
+                // Filter saves by platform by checking each game's platform
+                val platformSaves = mutableListOf<SaveFile>()
+                for (save in allSaves) {
+                    try {
+                        val game = apiService.getGame(save.rom_id)
+                        if (game.platform_slug == platform.slug) {
+                            platformSaves.add(save)
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MainViewModel", "Failed to get game ${save.rom_id} for save ${save.id}", e)
+                    }
+                }
+                
+                Log.d("MainViewModel", "Found ${platformSaves.size} save files for platform ${platform.display_name}")
+                
+                // Group saves by game
+                val savesByGame = platformSaves.groupBy { it.rom_id }
+                val gamesWithSaves = mutableListOf<GameWithSaves>()
+                
+                for ((romId, gameSaves) in savesByGame) {
+                    try {
+                        val game = apiService.getGame(romId)
+                        gamesWithSaves.add(GameWithSaves(game, gameSaves))
+                    } catch (e: Exception) {
+                        Log.w("MainViewModel", "Failed to get game $romId for saves", e)
+                    }
+                }
+                
+                _uiState.value = _uiState.value.copy(
+                    saveFilesForPlatform = gamesWithSaves,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to load save files for platform", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load save files: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun navigateToSaveStatesDetail(platform: Platform) {
+        navigateToScreen(Screen.SaveStatesDetail(platform))
+        loadSaveStatesForPlatform(platform)
+    }
+    
+    private fun loadSaveStatesForPlatform(platform: Platform) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                // Try getting all states first, then filter client-side
+                Log.d("MainViewModel", "Loading all save states to filter for platform ${platform.display_name}")
+                val allStates = apiService.getStates()
+                Log.d("MainViewModel", "Found ${allStates.size} total save states")
+                
+                // Filter states by platform by checking each game's platform
+                val platformStates = mutableListOf<SaveState>()
+                for (state in allStates) {
+                    try {
+                        val game = apiService.getGame(state.rom_id)
+                        if (game.platform_slug == platform.slug) {
+                            platformStates.add(state)
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MainViewModel", "Failed to get game ${state.rom_id} for state ${state.id}", e)
+                    }
+                }
+                
+                Log.d("MainViewModel", "Found ${platformStates.size} save states for platform ${platform.display_name}")
+                
+                // Group states by game
+                val statesByGame = platformStates.groupBy { it.rom_id }
+                val gamesWithStates = mutableListOf<GameWithStates>()
+                
+                for ((romId, gameStates) in statesByGame) {
+                    try {
+                        val game = apiService.getGame(romId)
+                        gamesWithStates.add(GameWithStates(game, gameStates))
+                    } catch (e: Exception) {
+                        Log.w("MainViewModel", "Failed to get game $romId for states", e)
+                    }
+                }
+                
+                _uiState.value = _uiState.value.copy(
+                    saveStatesForPlatform = gamesWithStates,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to load save states for platform", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load save states: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun navigateToGameSaveStates(game: Game) {
+        navigateToScreen(Screen.GameSaveStates(game))
+        loadGameSaveStates(game)
+    }
+    
+    private fun loadGameSaveStates(game: Game) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                Log.d("MainViewModel", "Loading save states for game: ${game.name ?: game.fs_name_no_ext}")
+                val states = apiService.getStates(romId = game.id)
+                Log.d("MainViewModel", "Found ${states.size} save states for game")
+                
+                _uiState.value = _uiState.value.copy(
+                    gameStates = states,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to load save states for game", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load save states: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun navigateToGameSaveFiles(game: Game) {
+        navigateToScreen(Screen.GameSaveFiles(game))
+        loadGameSaveFiles(game)
+    }
+    
+    private fun loadGameSaveFiles(game: Game) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                Log.d("MainViewModel", "Loading save files for game: ${game.name ?: game.fs_name_no_ext}")
+                val saves = apiService.getSaves(romId = game.id)
+                Log.d("MainViewModel", "Found ${saves.size} save files for game")
+                
+                _uiState.value = _uiState.value.copy(
+                    gameSaves = saves,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to load save files for game", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load save files: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    private fun loadSaveFiles() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                val platforms = _uiState.value.platforms
+                if (platforms.isEmpty()) {
+                    Log.w("MainViewModel", "No platforms loaded, loading platforms first")
+                    loadPlatforms()
+                    return@launch
+                }
+                
+                Log.d("MainViewModel", "Loading all save files")
+                val allSaves = apiService.getSaves()
+                Log.d("MainViewModel", "Found ${allSaves.size} total save files")
+                
+                if (allSaves.isNotEmpty()) {
+                    // Group by platform by checking each game's platform
+                    val savesByPlatform = allSaves.groupBy { save ->
+                        try {
+                            val game = apiService.getGame(save.rom_id)
+                            platforms.find { it.slug == game.platform_slug }
+                        } catch (e: Exception) {
+                            Log.w("MainViewModel", "Failed to get game ${save.rom_id} for save ${save.id}", e)
+                            null
+                        }
+                    }.filterKeys { it != null }
+                    
+                    savesByPlatform.forEach { (platform, saves) ->
+                        Log.d("MainViewModel", "${platform?.display_name}: ${saves.size} save files")
+                    }
+                    
+                    val platformSaveFiles = savesByPlatform.map { (platform, saves) ->
+                        val gameCount = saves.map { it.rom_id }.distinct().size
+                        PlatformSaveFiles(
+                            platform = platform!!,
+                            saveCount = saves.size,
+                            gameCount = gameCount
+                        )
+                    }.sortedBy { it.platform.display_name }
+                    
+                    _uiState.value = _uiState.value.copy(
+                        saveFiles = allSaves,
+                        saveFilesPlatforms = platformSaveFiles,
+                        isLoading = false
+                    )
+                } else {
+                    Log.d("MainViewModel", "No save files found")
+                    _uiState.value = _uiState.value.copy(
+                        saveFiles = emptyList(),
+                        saveFilesPlatforms = emptyList(),
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to load save files", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load save files: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    private fun loadSaveStates() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                val platforms = _uiState.value.platforms
+                Log.d("MainViewModel", "Loading save states for ${platforms.size} platforms")
+                
+                val allSaveStates = mutableListOf<SaveState>()
+                val saveStatesPlatforms = mutableListOf<PlatformSaveStates>()
+                
+                // First try to get all save states without platform filtering
+                try {
+                    val allStates = apiService.getStates()
+                    Log.d("MainViewModel", "Found ${allStates.size} total save states across all platforms")
+                    allSaveStates.addAll(allStates)
+                    
+                    if (allStates.isNotEmpty()) {
+                        // Group by platform
+                        val statesByPlatform = allStates.groupBy { state ->
+                            // We need to get the game to find its platform - this is expensive but necessary
+                            try {
+                                val game = apiService.getGame(state.rom_id)
+                                platforms.find { it.slug == game.platform_slug }
+                            } catch (e: Exception) {
+                                Log.w("MainViewModel", "Failed to get game ${state.rom_id} for state ${state.id}", e)
+                                null
+                            }
+                        }.filterKeys { it != null }
+                        
+                        statesByPlatform.forEach { (platform, states) ->
+                            if (platform != null) {
+                                Log.d("MainViewModel", "Platform ${platform.display_name}: ${states.size} states")
+                                saveStatesPlatforms.add(
+                                    PlatformSaveStates(
+                                        platform = platform,
+                                        stateCount = states.size,
+                                        gameCount = states.map { it.rom_id }.distinct().size
+                                    )
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "Failed to load all save states, trying per-platform", e)
+                    
+                    // Fallback: Get save states for each platform individually
+                    for (platform in platforms) {
+                        try {
+                            val platformStates = apiService.getStates(platformId = platform.id)
+                            Log.d("MainViewModel", "Platform ${platform.display_name}: ${platformStates.size} states")
+                            if (platformStates.isNotEmpty()) {
+                                allSaveStates.addAll(platformStates)
+                                saveStatesPlatforms.add(
+                                    PlatformSaveStates(
+                                        platform = platform,
+                                        stateCount = platformStates.size,
+                                        gameCount = platformStates.map { it.rom_id }.distinct().size
+                                    )
+                                )
+                            }
+                        } catch (e: Exception) {
+                            Log.w("MainViewModel", "Failed to load states for platform ${platform.display_name}", e)
+                        }
+                    }
+                }
+                
+                Log.d("MainViewModel", "Final result: ${allSaveStates.size} total states, ${saveStatesPlatforms.size} platforms with states")
+                
+                _uiState.value = _uiState.value.copy(
+                    saveStates = allSaveStates,
+                    saveStatesPlatforms = saveStatesPlatforms,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to load save states", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to load save states: ${e.message}",
+                    isLoading = false
+                )
+            }
+        }
+    }
+    
+    fun downloadAllSaveFiles() {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val saveFiles = _uiState.value.saveFiles
+                Log.d("MainViewModel", "Starting download of ${saveFiles.size} save files")
+                Log.d("MainViewModel", "Save files directory: '${settings.saveFilesDirectory}'")
+                downloadManager.downloadSaveFiles(saveFiles, settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading ${saveFiles.size} save files"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download all save files", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to start save files download: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadAllSaveStates() {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val saveStates = _uiState.value.saveStates
+                Log.d("MainViewModel", "Starting download of ${saveStates.size} save states")
+                Log.d("MainViewModel", "Save states directory: '${settings.saveStatesDirectory}'")
+                downloadManager.downloadSaveStates(saveStates, settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading ${saveStates.size} save states"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download all save states", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to start save states download: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadPlatformSaveFiles(platform: Platform) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val platformSaveFiles = _uiState.value.saveFilesForPlatform.flatMap { it.saves }
+                Log.d("MainViewModel", "Starting download of ${platformSaveFiles.size} save files for platform ${platform.display_name}")
+                downloadManager.downloadSaveFiles(platformSaveFiles, settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading ${platformSaveFiles.size} save files for ${platform.display_name}"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download platform save files", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to download save files: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadPlatformSaveStates(platform: Platform) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val platformSaveStates = _uiState.value.saveStatesForPlatform.flatMap { it.states }
+                Log.d("MainViewModel", "Starting download of ${platformSaveStates.size} save states for platform ${platform.display_name}")
+                downloadManager.downloadSaveStates(platformSaveStates, settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading ${platformSaveStates.size} save states for ${platform.display_name}"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download platform save states", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to download save states: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadGameSaveFiles(game: Game) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val gameSaveFiles = _uiState.value.gameSaves
+                Log.d("MainViewModel", "Starting download of ${gameSaveFiles.size} save files for game ${game.name ?: game.fs_name_no_ext}")
+                downloadManager.downloadSaveFiles(gameSaveFiles, settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading ${gameSaveFiles.size} save files for ${game.name ?: game.fs_name_no_ext}"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download game save files", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to download save files: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadGameSaveStates(game: Game) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val gameSaveStates = _uiState.value.gameStates
+                Log.d("MainViewModel", "Starting download of ${gameSaveStates.size} save states for game ${game.name ?: game.fs_name_no_ext}")
+                downloadManager.downloadSaveStates(gameSaveStates, settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading ${gameSaveStates.size} save states for ${game.name ?: game.fs_name_no_ext}"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download game save states", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to download save states: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadSingleSaveFile(saveFile: com.romm.android.data.SaveFile) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                Log.d("MainViewModel", "Starting download of save file: ${saveFile.file_name}")
+                Log.d("MainViewModel", "Save files directory: '${settings.saveFilesDirectory}'")
+                downloadManager.downloadSaveFiles(listOf(saveFile), settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading save file: ${saveFile.file_name}"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download save file", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to download save file: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun downloadSingleSaveState(saveState: com.romm.android.data.SaveState) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                Log.d("MainViewModel", "Starting download of save state: ${saveState.file_name}")
+                Log.d("MainViewModel", "Save states directory: '${settings.saveStatesDirectory}'")
+                downloadManager.downloadSaveStates(listOf(saveState), settings)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Started downloading save state: ${saveState.file_name}"
+                )
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to download save state", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to download save state: ${e.message}"
+                )
+            }
         }
     }
 }

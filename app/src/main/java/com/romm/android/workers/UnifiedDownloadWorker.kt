@@ -29,7 +29,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
 ) : CoroutineWorker(context, workerParams) {
     
     private enum class DownloadType {
-        GAME, FIRMWARE
+        GAME, FIRMWARE, SAVE_FILE, SAVE_STATE
     }
     
     companion object {
@@ -81,6 +81,8 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 when (DownloadType.valueOf(downloadType)) {
                     DownloadType.GAME -> downloadGame()
                     DownloadType.FIRMWARE -> downloadFirmware()
+                    DownloadType.SAVE_FILE -> downloadSaveFile()
+                    DownloadType.SAVE_STATE -> downloadSaveState()
                 }
             }
         } catch (e: OutOfMemoryError) {
@@ -661,5 +663,178 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         }
         
         return directory.delete()
+    }
+    
+    /**
+     * Download a save file with foreground service notification
+     */
+    private suspend fun downloadSaveFile(): Result {
+        val saveId = inputData.getInt("saveId", -1)
+        val fileName = inputData.getString("fileName") ?: return Result.failure()
+        val emulator = inputData.getString("emulator") ?: "Unknown"
+        val romId = inputData.getInt("romId", -1)
+        val downloadName = inputData.getString("downloadName") ?: return Result.failure()
+        val saveFilesDirectoryUri = inputData.getString("saveFilesDirectory") ?: return Result.failure()
+        
+        Log.d("UnifiedDownloadWorker", "Downloading save file: $downloadName (ID: $saveId)")
+        
+        // Get base directory
+        val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(saveFilesDirectoryUri))
+        if (baseDir == null) {
+            Log.e("UnifiedDownloadWorker", "Could not access save files directory: $saveFilesDirectoryUri")
+            return Result.failure()
+        }
+        
+        // Get rom info to determine platform
+        val rom = apiService.getGame(romId)
+        val platformSlug = rom.platform_fs_slug
+        
+        // Create directory structure: [SAVE_DIR]/[PLATFORM]/[EMULATOR]/
+        val platformFolderName = PlatformMapper.getEsdeFolderName(platformSlug)
+        val emulatorFolderName = emulator
+        
+        // Get or create platform directory
+        val platformDir = getOrCreateSaveDirectory(baseDir, platformFolderName)
+        if (platformDir == null) {
+            Log.e("UnifiedDownloadWorker", "Could not create platform directory: $platformFolderName")
+            return Result.failure()
+        }
+        
+        // Get or create emulator directory
+        val emulatorDir = getOrCreateSaveDirectory(platformDir, emulatorFolderName)
+        if (emulatorDir == null) {
+            Log.e("UnifiedDownloadWorker", "Could not create emulator directory: $emulatorFolderName")
+            return Result.failure()
+        }
+        
+        // Get save file metadata first, then download using assets endpoint
+        val saveFile = apiService.getSave(saveId)
+        val response = apiService.downloadSaveFile(saveFile)
+        
+        if (!response.isSuccessful) {
+            Log.e("UnifiedDownloadWorker", "Save file download failed with response code: ${response.code()}")
+            return Result.failure()
+        }
+        
+        response.body()?.let { body ->
+            // Create/overwrite the file
+            val outputFile = createOrReplaceFile(emulatorDir, fileName)
+            if (outputFile == null) {
+                Log.e("UnifiedDownloadWorker", "Could not create save file output: $fileName")
+                return Result.failure()
+            }
+            
+            // Download with foreground progress updates
+            downloadFileWithForegroundUpdates(body, outputFile, downloadName) { progress ->
+                setProgress(workDataOf("progress" to progress))
+            }
+            
+            Log.d("UnifiedDownloadWorker", "=== SAVE FILE DOWNLOAD SUCCESS === $fileName")
+            return Result.success()
+        }
+        
+        return Result.failure()
+    }
+    
+    /**
+     * Download a save state with foreground service notification
+     */
+    private suspend fun downloadSaveState(): Result {
+        val stateId = inputData.getInt("stateId", -1)
+        val fileName = inputData.getString("fileName") ?: return Result.failure()
+        val emulator = inputData.getString("emulator") ?: "Unknown"
+        val romId = inputData.getInt("romId", -1)
+        val downloadName = inputData.getString("downloadName") ?: return Result.failure()
+        val saveStatesDirectoryUri = inputData.getString("saveStatesDirectory") ?: return Result.failure()
+        
+        Log.d("UnifiedDownloadWorker", "Downloading save state: $downloadName (ID: $stateId)")
+        
+        // Get base directory
+        val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(saveStatesDirectoryUri))
+        if (baseDir == null) {
+            Log.e("UnifiedDownloadWorker", "Could not access save states directory: $saveStatesDirectoryUri")
+            return Result.failure()
+        }
+        
+        // Get rom info to determine platform
+        val rom = apiService.getGame(romId)
+        val platformSlug = rom.platform_fs_slug
+        
+        // Create directory structure: [STATE_DIR]/[PLATFORM]/[EMULATOR]/
+        val platformFolderName = PlatformMapper.getEsdeFolderName(platformSlug)
+        val emulatorFolderName = emulator
+        
+        // Get or create platform directory
+        val platformDir = getOrCreateSaveDirectory(baseDir, platformFolderName)
+        if (platformDir == null) {
+            Log.e("UnifiedDownloadWorker", "Could not create platform directory: $platformFolderName")
+            return Result.failure()
+        }
+        
+        // Get or create emulator directory
+        val emulatorDir = getOrCreateSaveDirectory(platformDir, emulatorFolderName)
+        if (emulatorDir == null) {
+            Log.e("UnifiedDownloadWorker", "Could not create emulator directory: $emulatorFolderName")
+            return Result.failure()
+        }
+        
+        // Get save state metadata first, then download using assets endpoint
+        val saveState = apiService.getState(stateId)
+        val response = apiService.downloadSaveState(saveState)
+        
+        if (!response.isSuccessful) {
+            Log.e("UnifiedDownloadWorker", "Save state download failed with response code: ${response.code()}")
+            return Result.failure()
+        }
+        
+        response.body()?.let { body ->
+            // Create/overwrite the file
+            val outputFile = createOrReplaceFile(emulatorDir, fileName)
+            if (outputFile == null) {
+                Log.e("UnifiedDownloadWorker", "Could not create save state output: $fileName")
+                return Result.failure()
+            }
+            
+            // Download with foreground progress updates
+            downloadFileWithForegroundUpdates(body, outputFile, downloadName) { progress ->
+                setProgress(workDataOf("progress" to progress))
+            }
+            
+            Log.d("UnifiedDownloadWorker", "=== SAVE STATE DOWNLOAD SUCCESS === $fileName")
+            return Result.success()
+        }
+        
+        return Result.failure()
+    }
+    
+    /**
+     * Get or create directory for saves/states
+     */
+    private fun getOrCreateSaveDirectory(baseDir: DocumentFile, dirName: String): DocumentFile? {
+        // Try to find existing directory
+        val existingDir = baseDir.findFile(dirName)
+        if (existingDir != null && existingDir.isDirectory) {
+            Log.d("UnifiedDownloadWorker", "Using existing directory: $dirName")
+            return existingDir
+        }
+        
+        // Create new directory
+        Log.d("UnifiedDownloadWorker", "Creating directory: $dirName")
+        val newDir = baseDir.createDirectory(dirName)
+        
+        if (newDir != null) {
+            Log.d("UnifiedDownloadWorker", "Successfully created directory: ${newDir.name}")
+            return newDir
+        }
+        
+        // Creation failed, try to find it again (race condition handling)
+        val retryDir = baseDir.findFile(dirName)
+        if (retryDir != null && retryDir.isDirectory) {
+            Log.d("UnifiedDownloadWorker", "Found directory created by another worker: ${retryDir.name}")
+            return retryDir
+        }
+        
+        Log.e("UnifiedDownloadWorker", "Failed to create or find directory: $dirName")
+        return null
     }
 }

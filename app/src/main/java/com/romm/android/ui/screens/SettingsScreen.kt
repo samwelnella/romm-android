@@ -37,7 +37,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     
-    // Directory picker launcher
+    // Directory picker launcher for games/ROM downloads
     val directoryPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -50,6 +50,38 @@ fun SettingsScreen(
             
             // Update settings with the selected URI
             currentSettings = currentSettings.copy(downloadDirectory = uri.toString())
+        }
+    }
+    
+    // Directory picker launcher for save files
+    val saveFilesDirectoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Take persistent permission
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            
+            // Update settings with the selected URI
+            currentSettings = currentSettings.copy(saveFilesDirectory = uri.toString())
+        }
+    }
+    
+    // Directory picker launcher for save states
+    val saveStatesDirectoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Take persistent permission
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            
+            // Update settings with the selected URI
+            currentSettings = currentSettings.copy(saveStatesDirectory = uri.toString())
         }
     }
     
@@ -198,6 +230,118 @@ fun SettingsScreen(
                             Text("+")
                         }
                     }
+                }
+            }
+        }
+        
+        Card {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Save Files Directory",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Text(
+                    "Choose where to save downloaded save files. They will be organized as [Directory]/[Platform]/[Emulator]/",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Display selected directory
+                if (currentSettings.saveFilesDirectory.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                "Selected Directory:",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                getDisplayNameForUri(currentSettings.saveFilesDirectory),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                
+                // Directory selection button
+                Button(
+                    onClick = { saveFilesDirectoryPickerLauncher.launch(null) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Folder, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (currentSettings.saveFilesDirectory.isEmpty()) 
+                            "Select Save Files Directory" 
+                        else 
+                            "Change Directory"
+                    )
+                }
+            }
+        }
+        
+        Card {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Save States Directory",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Text(
+                    "Choose where to save downloaded save states. They will be organized as [Directory]/[Platform]/[Emulator]/",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Display selected directory
+                if (currentSettings.saveStatesDirectory.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                "Selected Directory:",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                getDisplayNameForUri(currentSettings.saveStatesDirectory),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                
+                // Directory selection button
+                Button(
+                    onClick = { saveStatesDirectoryPickerLauncher.launch(null) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Folder, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (currentSettings.saveStatesDirectory.isEmpty()) 
+                            "Select Save States Directory" 
+                        else 
+                            "Change Directory"
+                    )
                 }
             }
         }

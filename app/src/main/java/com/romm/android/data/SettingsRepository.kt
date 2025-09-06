@@ -23,6 +23,8 @@ class SettingsRepository @Inject constructor(
         val PASSWORD = stringPreferencesKey("password")
         val DOWNLOAD_DIRECTORY = stringPreferencesKey("download_directory")
         val MAX_CONCURRENT_DOWNLOADS = intPreferencesKey("max_concurrent_downloads")
+        val SAVE_FILES_DIRECTORY = stringPreferencesKey("save_files_directory")
+        val SAVE_STATES_DIRECTORY = stringPreferencesKey("save_states_directory")
     }
     
     val settings: Flow<AppSettings> = context.dataStore.data
@@ -32,7 +34,9 @@ class SettingsRepository @Inject constructor(
                 username = preferences[PreferencesKeys.USERNAME] ?: "",
                 password = preferences[PreferencesKeys.PASSWORD] ?: "",
                 downloadDirectory = preferences[PreferencesKeys.DOWNLOAD_DIRECTORY] ?: "",
-                maxConcurrentDownloads = preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] ?: 3
+                maxConcurrentDownloads = preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] ?: 3,
+                saveFilesDirectory = preferences[PreferencesKeys.SAVE_FILES_DIRECTORY] ?: "",
+                saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: ""
             )
         }
     
@@ -43,6 +47,8 @@ class SettingsRepository @Inject constructor(
             preferences[PreferencesKeys.PASSWORD] = settings.password
             preferences[PreferencesKeys.DOWNLOAD_DIRECTORY] = settings.downloadDirectory
             preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] = settings.maxConcurrentDownloads
+            preferences[PreferencesKeys.SAVE_FILES_DIRECTORY] = settings.saveFilesDirectory
+            preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] = settings.saveStatesDirectory
         }
     }
     
@@ -53,7 +59,9 @@ class SettingsRepository @Inject constructor(
             username = preferences[PreferencesKeys.USERNAME] ?: "",
             password = preferences[PreferencesKeys.PASSWORD] ?: "",
             downloadDirectory = preferences[PreferencesKeys.DOWNLOAD_DIRECTORY] ?: "",
-            maxConcurrentDownloads = preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] ?: 3
+            maxConcurrentDownloads = preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] ?: 3,
+            saveFilesDirectory = preferences[PreferencesKeys.SAVE_FILES_DIRECTORY] ?: "",
+            saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: ""
         )
     }
 }

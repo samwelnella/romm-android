@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.SaveAs
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +23,8 @@ fun PlatformListScreen(
     isLoading: Boolean,
     onPlatformClick: (Platform) -> Unit,
     onCollectionsClick: () -> Unit,
+    onSaveFilesClick: () -> Unit,
+    onSaveStatesClick: () -> Unit,
     onRefresh: () -> Unit,
     lazyListState: LazyListState = rememberLazyListState()
 ) {
@@ -53,6 +57,64 @@ fun PlatformListScreen(
                     }
                     Icon(
                         Icons.Filled.ArrowForward,
+                        contentDescription = null
+                    )
+                }
+            }
+        }
+        
+        item {
+            Card(
+                onClick = onSaveFilesClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Save Files",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            "Browse and download save files",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.Filled.SaveAs,
+                        contentDescription = null
+                    )
+                }
+            }
+        }
+        
+        item {
+            Card(
+                onClick = onSaveStatesClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Save States",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            "Browse and download save states",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.Filled.Restore,
                         contentDescription = null
                     )
                 }

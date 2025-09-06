@@ -63,11 +63,15 @@ class DownloadManager @Inject constructor(
         // Firmware-specific
         val firmwareId: Int? = null,
         val fileName: String? = null,
-        val platformId: Int? = null
+        val platformId: Int? = null,
+        // Save file/state specific
+        val saveId: Int? = null,
+        val emulator: String? = null,
+        val romId: Int? = null
     )
     
     enum class DownloadType {
-        GAME, FIRMWARE
+        GAME, FIRMWARE, SAVE_FILE, SAVE_STATE
     }
     
     private val cancelReceiver = object : BroadcastReceiver() {
@@ -340,6 +344,64 @@ class DownloadManager @Inject constructor(
     }
     
     /**
+     * Download multiple save files using foreground services
+     */
+    suspend fun downloadSaveFiles(saves: List<com.romm.android.data.SaveFile>, settings: AppSettings) {
+        if (settings.saveFilesDirectory.isEmpty()) {
+            Log.e("DownloadManager", "Save files directory is empty!")
+            return
+        }
+        
+        if (saves.isEmpty()) {
+            Log.w("DownloadManager", "No save files to download")
+            return
+        }
+        
+        val downloadItems = saves.map { save ->
+            DownloadItem(
+                id = "save_${save.id}",
+                name = "Save: ${save.name ?: save.file_name}",
+                type = DownloadType.SAVE_FILE,
+                saveId = save.id,
+                fileName = save.file_name,
+                emulator = save.emulator,
+                romId = save.rom_id
+            )
+        }
+        
+        startDownloadSession(downloadItems, settings)
+    }
+    
+    /**
+     * Download multiple save states using foreground services
+     */
+    suspend fun downloadSaveStates(states: List<com.romm.android.data.SaveState>, settings: AppSettings) {
+        if (settings.saveStatesDirectory.isEmpty()) {
+            Log.e("DownloadManager", "Save states directory is empty!")
+            return
+        }
+        
+        if (states.isEmpty()) {
+            Log.w("DownloadManager", "No save states to download")
+            return
+        }
+        
+        val downloadItems = states.map { state ->
+            DownloadItem(
+                id = "state_${state.id}",
+                name = "State: ${state.name ?: state.file_name}",
+                type = DownloadType.SAVE_STATE,
+                saveId = state.id,
+                fileName = state.file_name,
+                emulator = state.emulator,
+                romId = state.rom_id
+            )
+        }
+        
+        startDownloadSession(downloadItems, settings)
+    }
+    
+    /**
      * Download missing games - checks for file existence first
      */
     suspend fun downloadMissingGames(games: List<Game>, settings: AppSettings) = withContext(Dispatchers.IO) {
@@ -578,6 +640,8 @@ class DownloadManager @Inject constructor(
             .putString("username", settings.username)
             .putString("password", settings.password)
             .putString("downloadDirectory", settings.downloadDirectory)
+            .putString("saveFilesDirectory", settings.saveFilesDirectory)
+            .putString("saveStatesDirectory", settings.saveStatesDirectory)
             .putString("sessionId", currentSession!!.sessionId)
             .putInt("maxConcurrentDownloads", settings.maxConcurrentDownloads)
         
@@ -591,6 +655,18 @@ class DownloadManager @Inject constructor(
                 builder.putInt("firmwareId", item.firmwareId!!)
                     .putString("fileName", item.fileName!!)
                     .putInt("platformId", item.platformId!!)
+            }
+            DownloadType.SAVE_FILE -> {
+                builder.putInt("saveId", item.saveId!!)
+                    .putString("fileName", item.fileName!!)
+                    .putString("emulator", item.emulator ?: "Unknown")
+                    .putInt("romId", item.romId!!)
+            }
+            DownloadType.SAVE_STATE -> {
+                builder.putInt("stateId", item.saveId!!)
+                    .putString("fileName", item.fileName!!)
+                    .putString("emulator", item.emulator ?: "Unknown")
+                    .putInt("romId", item.romId!!)
             }
         }
         
