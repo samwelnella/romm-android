@@ -1355,13 +1355,16 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveFilesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save files directory in Settings before downloading save files"
+                    )
+                    return@launch
+                }
                 val saveFiles = _uiState.value.saveFiles
                 Log.d("MainViewModel", "Starting download of ${saveFiles.size} save files")
                 Log.d("MainViewModel", "Save files directory: '${settings.saveFilesDirectory}'")
                 downloadManager.downloadSaveFiles(saveFiles, settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading ${saveFiles.size} save files"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download all save files", e)
                 _uiState.value = _uiState.value.copy(
@@ -1375,13 +1378,16 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveStatesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save states directory in Settings before downloading save states"
+                    )
+                    return@launch
+                }
                 val saveStates = _uiState.value.saveStates
                 Log.d("MainViewModel", "Starting download of ${saveStates.size} save states")
                 Log.d("MainViewModel", "Save states directory: '${settings.saveStatesDirectory}'")
                 downloadManager.downloadSaveStates(saveStates, settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading ${saveStates.size} save states"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download all save states", e)
                 _uiState.value = _uiState.value.copy(
@@ -1395,12 +1401,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveFilesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save files directory in Settings before downloading save files"
+                    )
+                    return@launch
+                }
                 val platformSaveFiles = _uiState.value.saveFilesForPlatform.flatMap { it.saves }
                 Log.d("MainViewModel", "Starting download of ${platformSaveFiles.size} save files for platform ${platform.display_name}")
                 downloadManager.downloadSaveFiles(platformSaveFiles, settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading ${platformSaveFiles.size} save files for ${platform.display_name}"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download platform save files", e)
                 _uiState.value = _uiState.value.copy(
@@ -1414,12 +1423,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveStatesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save states directory in Settings before downloading save states"
+                    )
+                    return@launch
+                }
                 val platformSaveStates = _uiState.value.saveStatesForPlatform.flatMap { it.states }
                 Log.d("MainViewModel", "Starting download of ${platformSaveStates.size} save states for platform ${platform.display_name}")
                 downloadManager.downloadSaveStates(platformSaveStates, settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading ${platformSaveStates.size} save states for ${platform.display_name}"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download platform save states", e)
                 _uiState.value = _uiState.value.copy(
@@ -1433,12 +1445,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveFilesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save files directory in Settings before downloading save files"
+                    )
+                    return@launch
+                }
                 val gameSaveFiles = _uiState.value.gameSaves
                 Log.d("MainViewModel", "Starting download of ${gameSaveFiles.size} save files for game ${game.name ?: game.fs_name_no_ext}")
                 downloadManager.downloadSaveFiles(gameSaveFiles, settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading ${gameSaveFiles.size} save files for ${game.name ?: game.fs_name_no_ext}"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download game save files", e)
                 _uiState.value = _uiState.value.copy(
@@ -1452,12 +1467,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveStatesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save states directory in Settings before downloading save states"
+                    )
+                    return@launch
+                }
                 val gameSaveStates = _uiState.value.gameStates
                 Log.d("MainViewModel", "Starting download of ${gameSaveStates.size} save states for game ${game.name ?: game.fs_name_no_ext}")
                 downloadManager.downloadSaveStates(gameSaveStates, settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading ${gameSaveStates.size} save states for ${game.name ?: game.fs_name_no_ext}"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download game save states", e)
                 _uiState.value = _uiState.value.copy(
@@ -1471,12 +1489,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveFilesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save files directory in Settings before downloading save files"
+                    )
+                    return@launch
+                }
                 Log.d("MainViewModel", "Starting download of save file: ${saveFile.file_name}")
                 Log.d("MainViewModel", "Save files directory: '${settings.saveFilesDirectory}'")
                 downloadManager.downloadSaveFiles(listOf(saveFile), settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading save file: ${saveFile.file_name}"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download save file", e)
                 _uiState.value = _uiState.value.copy(
@@ -1490,12 +1511,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = _uiState.value.settings
+                if (settings.saveStatesDirectory.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Please set a save states directory in Settings before downloading save states"
+                    )
+                    return@launch
+                }
                 Log.d("MainViewModel", "Starting download of save state: ${saveState.file_name}")
                 Log.d("MainViewModel", "Save states directory: '${settings.saveStatesDirectory}'")
                 downloadManager.downloadSaveStates(listOf(saveState), settings)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Started downloading save state: ${saveState.file_name}"
-                )
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Failed to download save state", e)
                 _uiState.value = _uiState.value.copy(
