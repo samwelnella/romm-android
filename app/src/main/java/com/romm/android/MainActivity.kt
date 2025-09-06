@@ -33,6 +33,9 @@ import com.romm.android.ui.theme.RomMTheme
 import com.romm.android.ui.components.*
 import com.romm.android.ui.screens.*
 import com.romm.android.utils.DownloadManager
+import com.romm.android.sync.SyncDirection
+import com.romm.android.sync.SyncRequest
+import com.romm.android.sync.SyncManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -263,6 +266,12 @@ fun RomMApp(viewModel: MainViewModel) {
                                 is Screen.PlatformList -> "RomM Android"
                                 is Screen.CollectionList -> "Collections"
                                 is Screen.GameDetails -> screen.game.name ?: screen.game.fs_name_no_ext
+                                is Screen.SaveFilesList -> "Save Files"
+                                is Screen.SaveStatesList -> "Save States"
+                                is Screen.SaveFilesDetail -> "${screen.platform.display_name} - Save Files"
+                                is Screen.SaveStatesDetail -> "${screen.platform.display_name} - Save States"
+                                is Screen.GameSaveFiles -> "${screen.game.name ?: screen.game.fs_name_no_ext} - Save Files"
+                                is Screen.GameSaveStates -> "${screen.game.name ?: screen.game.fs_name_no_ext} - Save States"
                                 else -> "RomM Android"
                             })
                         },
@@ -275,6 +284,11 @@ fun RomMApp(viewModel: MainViewModel) {
                         },
                         actions = {
                             if (screen !is Screen.Settings) {
+                                // Sync button
+                                IconButton(onClick = { viewModel.showSyncDialog() }) {
+                                    Icon(Icons.Filled.Sync, contentDescription = "Sync")
+                                }
+                                // Settings button  
                                 IconButton(onClick = { viewModel.showSettings() }) {
                                     Icon(Icons.Filled.Settings, contentDescription = "Settings")
                                 }
@@ -533,6 +547,109 @@ fun RomMApp(viewModel: MainViewModel) {
                 )
             }
         }
+        
+        // Sync Dialog
+        if (uiState.showSyncDialog) {
+            SyncDialog(
+                onDismiss = viewModel::hideSyncDialog,
+                onStartSync = { direction -> 
+                    viewModel.startSync(direction)
+                    viewModel.hideSyncDialog()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun SyncDialog(
+    onDismiss: () -> Unit,
+    onStartSync: (SyncDirection) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Sync Save Data")
+        },
+        text = {
+            Column {
+                Text(
+                    "Choose sync direction:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                SyncDirectionButton(
+                    icon = Icons.Filled.Upload,
+                    text = "Upload Only",
+                    description = "Upload local saves to server",
+                    onClick = { onStartSync(SyncDirection.UPLOAD_ONLY) }
+                )
+                
+                SyncDirectionButton(
+                    icon = Icons.Filled.Download,
+                    text = "Download Only", 
+                    description = "Download saves from server",
+                    onClick = { onStartSync(SyncDirection.DOWNLOAD_ONLY) }
+                )
+                
+                SyncDirectionButton(
+                    icon = Icons.Filled.Sync,
+                    text = "Two-Way Sync",
+                    description = "Upload and download - newest files win",
+                    onClick = { onStartSync(SyncDirection.BIDIRECTIONAL) }
+                )
+            }
+        },
+        confirmButton = {
+            // No confirm button needed - actions are handled by the buttons above
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun SyncDirectionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -566,7 +683,8 @@ data class UiState(
     val successMessage: String? = null,
     val settings: AppSettings = AppSettings(),
     val searchQuery: String = "", // Search query for game list
-    val isSearchActive: Boolean = false // Whether search mode is active
+    val isSearchActive: Boolean = false, // Whether search mode is active
+    val showSyncDialog: Boolean = false // Whether sync dialog is shown
 )
 
 sealed class Screen {
@@ -613,7 +731,8 @@ sealed class Screen {
 class MainViewModel @Inject constructor(
     private val apiService: RomMApiService,
     private val downloadManager: DownloadManager,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val syncManager: SyncManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(UiState())
@@ -670,6 +789,51 @@ class MainViewModel @Inject constructor(
     fun showCollections() {
         navigateToScreen(Screen.CollectionList)
         loadCollections()
+    }
+    
+    fun showSyncDialog() {
+        _uiState.value = _uiState.value.copy(showSyncDialog = true)
+    }
+    
+    fun hideSyncDialog() {
+        _uiState.value = _uiState.value.copy(showSyncDialog = false)
+    }
+    
+    fun startSync(direction: SyncDirection) {
+        viewModelScope.launch {
+            try {
+                val settings = _uiState.value.settings
+                val syncRequest = SyncRequest(
+                    direction = direction,
+                    saveFilesEnabled = true,
+                    saveStatesEnabled = true
+                )
+                
+                syncManager.executeSync(
+                    syncRequest = syncRequest,
+                    settings = settings,
+                    onProgress = { progress ->
+                        // Optional: Show progress in main UI
+                        Log.d("MainViewModel", "Sync progress: ${progress.currentStep}")
+                    },
+                    onComplete = { result ->
+                        if (result.success) {
+                            _uiState.value = _uiState.value.copy(
+                                successMessage = "Sync completed: ↑${result.uploadedCount} ↓${result.downloadedCount} ⏸${result.skippedCount}"
+                            )
+                        } else {
+                            _uiState.value = _uiState.value.copy(
+                                error = "Sync failed: ${result.errors.firstOrNull() ?: "Unknown error"}"
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to start sync: ${e.message}"
+                )
+            }
+        }
     }
     
     private fun navigateToScreen(newScreen: Screen) {

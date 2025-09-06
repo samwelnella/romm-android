@@ -5,6 +5,8 @@ import androidx.work.WorkManager
 import com.romm.android.data.SettingsRepository
 import com.romm.android.network.RomMApiService
 import com.romm.android.utils.DownloadManager
+import com.romm.android.sync.FileScanner
+import com.romm.android.sync.SyncManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,9 +29,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideRomMApiService(
-        settingsRepository: SettingsRepository
+        settingsRepository: SettingsRepository,
+        @ApplicationContext context: Context
     ): RomMApiService {
-        return RomMApiService(settingsRepository)
+        return RomMApiService(settingsRepository, context)
     }
     
     @Provides
@@ -48,5 +51,24 @@ object AppModule {
         workManager: WorkManager
     ): DownloadManager {
         return DownloadManager(context, apiService, workManager)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideFileScanner(
+        @ApplicationContext context: Context
+    ): FileScanner {
+        return FileScanner(context)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSyncManager(
+        @ApplicationContext context: Context,
+        apiService: RomMApiService,
+        downloadManager: DownloadManager,
+        fileScanner: FileScanner
+    ): SyncManager {
+        return SyncManager(context, apiService, downloadManager, fileScanner)
     }
 }
