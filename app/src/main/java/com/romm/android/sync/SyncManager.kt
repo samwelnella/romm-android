@@ -37,6 +37,11 @@ class SyncManager @Inject constructor(
                     (syncRequest.emulatorFilter?.let { filter ->
                         item.emulator?.equals(filter, ignoreCase = true) ?: false
                     } ?: true) &&
+                    (syncRequest.gameFilter?.let { filter ->
+                        // Match against filename without extension
+                        val fileNameWithoutExt = item.fileName.substringBeforeLast(".")
+                        fileNameWithoutExt.equals(filter, ignoreCase = true)
+                    } ?: true) &&
                     (syncRequest.saveFilesEnabled || item.type != SyncItemType.SAVE_FILE) &&
                     (syncRequest.saveStatesEnabled || item.type != SyncItemType.SAVE_STATE)
                 }
@@ -264,6 +269,13 @@ class SyncManager @Inject constructor(
                                 continue
                             }
                             
+                            // Apply game filter if specified (match against ROM fs_name_no_ext)
+                            if (syncRequest.gameFilter != null && 
+                                !game.fs_name_no_ext.equals(syncRequest.gameFilter, ignoreCase = true)) {
+                                Log.d("SyncManager", "  -> Skipped due to game filter (${game.fs_name_no_ext} != ${syncRequest.gameFilter})")
+                                continue
+                            }
+                            
                             remoteItems.add(RemoteSyncItem(
                                 saveFile = save,
                                 type = SyncItemType.SAVE_FILE,
@@ -320,6 +332,13 @@ class SyncManager @Inject constructor(
                             if (syncRequest.platformFilter != null && 
                                 !game.platform_slug.equals(syncRequest.platformFilter, ignoreCase = true)) {
                                 Log.d("SyncManager", "  -> Skipped due to platform filter (${game.platform_slug} != ${syncRequest.platformFilter})")
+                                continue
+                            }
+                            
+                            // Apply game filter if specified (match against ROM fs_name_no_ext)
+                            if (syncRequest.gameFilter != null && 
+                                !game.fs_name_no_ext.equals(syncRequest.gameFilter, ignoreCase = true)) {
+                                Log.d("SyncManager", "  -> Skipped due to game filter (${game.fs_name_no_ext} != ${syncRequest.gameFilter})")
                                 continue
                             }
                             

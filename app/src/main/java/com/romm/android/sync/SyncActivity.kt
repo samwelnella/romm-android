@@ -84,6 +84,7 @@ class SyncActivity : ComponentActivity() {
             saveStatesEnabled = intent.getBooleanExtra("sync_save_states", true),
             platformFilter = intent.getStringExtra("platform_filter"),
             emulatorFilter = intent.getStringExtra("emulator_filter"),
+            gameFilter = intent.getStringExtra("game_filter"),
             dryRun = intent.getBooleanExtra("dry_run", false)
         )
     }
@@ -100,7 +101,8 @@ class SyncActivity : ComponentActivity() {
          *     saveFiles = true,
          *     saveStates = true,
          *     platform = "snes", // optional - filter to specific platform
-         *     emulator = "snes9x", // optional - filter to specific emulator  
+         *     emulator = "snes9x", // optional - filter to specific emulator
+         *     game = "Super Mario World", // optional - filter to specific game (filename without extension)
          *     dryRun = false
          * )
          * startActivityForResult(intent, REQUEST_SYNC)
@@ -113,6 +115,7 @@ class SyncActivity : ComponentActivity() {
             saveStates: Boolean = true,
             platform: String? = null,
             emulator: String? = null,
+            game: String? = null,
             dryRun: Boolean = false
         ): Intent {
             return Intent().apply {
@@ -122,6 +125,7 @@ class SyncActivity : ComponentActivity() {
                 putExtra("sync_save_states", saveStates)
                 platform?.let { putExtra("platform_filter", it) }
                 emulator?.let { putExtra("emulator_filter", it) }
+                game?.let { putExtra("game_filter", it) }
                 putExtra("dry_run", dryRun)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
