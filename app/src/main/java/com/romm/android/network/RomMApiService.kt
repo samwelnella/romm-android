@@ -3,6 +3,7 @@ package com.romm.android.network
 import com.romm.android.data.*
 import okhttp3.*
 import okhttp3.logging.HttpLoggingInterceptor
+import okio.source
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -176,9 +177,9 @@ class RomMApiService @Inject constructor(
             chain.proceed(request)
         }
         
-        // Add logging interceptor to see what's happening (but limit body logging for downloads)
+        // Add logging interceptor - use HEADERS level to avoid logging large upload bodies
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.HEADERS
         }
         
         // Create a custom connection spec that allows cleartext
@@ -408,39 +409,18 @@ class RomMApiService @Inject constructor(
     ): SaveFile {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        android.util.Log.d("RomMApiService", "Attempting to upload save file: $fileName")
-        android.util.Log.d("RomMApiService", "DocumentFile URI: ${documentFile.uri}")
-        android.util.Log.d("RomMApiService", "ROM ID: $romId")
-        android.util.Log.d("RomMApiService", "Emulator: $emulator")
+        android.util.Log.d("RomMApiService", "Uploading save file: $fileName (${documentFile.length()} bytes)")
         
-        // Use standard Storage Access Framework approach
-        val bytes = try {
-            applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
-                inputStream.readBytes()
-            } ?: throw IllegalArgumentException("Could not open input stream")
-        } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Failed to read file: ${e.message}")
-            throw IllegalArgumentException("Failed to read file: ${e.message}")
-        }
-        
-        android.util.Log.d("RomMApiService", "Read ${bytes.size} bytes from file")
-        
-        // Debug: Check if we're getting actual binary data or JSON error
-        if (bytes.size > 10) {
-            val preview = bytes.take(20).joinToString(" ") { byte -> "%02x".format(byte) }
-            android.util.Log.d("RomMApiService", "First 20 bytes (hex): $preview")
+        // Create streaming request body instead of reading entire file into memory
+        val requestBody = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
             
-            val text = try {
-                String(bytes.take(100).toByteArray(), Charsets.UTF_8)
-            } catch (e: Exception) {
-                "binary data"
-            }
-            android.util.Log.d("RomMApiService", "Content preview (first 100 chars): $text")
+            override fun contentLength() = documentFile.length()
             
-            // Check if we're still getting JSON error
-            if (text.contains("status_code") && text.contains("Asset not found")) {
-                android.util.Log.e("RomMApiService", "File content is JSON error instead of save data!")
-                throw IllegalArgumentException("File contains error response instead of save data: $text")
+            override fun writeTo(sink: okio.BufferedSink) {
+                applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
+                    sink.writeAll(inputStream.source())
+                } ?: throw IllegalArgumentException("Could not open input stream")
             }
         }
         
@@ -455,19 +435,13 @@ class RomMApiService @Inject constructor(
         val timestampedFileName = "$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
         // Create multipart body with 'saveFile' field name (matching Python code)
-        val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
         val multipartBody = MultipartBody.Part.createFormData(
             name = "saveFile",
             filename = timestampedFileName,
             body = requestBody
         )
         
-        android.util.Log.d("RomMApiService", "Created multipart body:")
-        android.util.Log.d("RomMApiService", "  - Field name: saveFile")
-        android.util.Log.d("RomMApiService", "  - Original filename: $fileName")
-        android.util.Log.d("RomMApiService", "  - Timestamped filename: $timestampedFileName")
-        android.util.Log.d("RomMApiService", "  - Content type: application/octet-stream")
-        android.util.Log.d("RomMApiService", "  - Content length: ${bytes.size} bytes")
+        android.util.Log.d("RomMApiService", "Created multipart body: $timestampedFileName")
         
         // Prepend "android-sync-" to emulator name for identification
         val androidSyncEmulator = if (emulator != null) "android-sync-$emulator" else "android-sync"
@@ -488,18 +462,19 @@ class RomMApiService @Inject constructor(
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        // Use ParcelFileDescriptor approach for consistency with uploadSaveFile
-        val bytes = try {
-            val pfd = applicationContext.contentResolver.openFileDescriptor(documentFile.uri, "r")
-                ?: throw IllegalArgumentException("Cannot open file descriptor")
+        android.util.Log.d("RomMApiService", "Uploading save state: $fileName (${documentFile.length()} bytes)")
+        
+        // Create streaming request body instead of reading entire file into memory
+        val requestBody = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
             
-            pfd.use { fileDescriptor ->
-                val fileInputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
-                fileInputStream.use { it.readBytes() }
+            override fun contentLength() = documentFile.length()
+            
+            override fun writeTo(sink: okio.BufferedSink) {
+                applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
+                    sink.writeAll(inputStream.source())
+                } ?: throw IllegalArgumentException("Could not open input stream")
             }
-        } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Failed to read save state file: ${e.message}")
-            throw IllegalArgumentException("Failed to read save state file: ${e.message}")
         }
         
         // Create filename with file's last modified timestamp
@@ -513,7 +488,6 @@ class RomMApiService @Inject constructor(
         val timestampedFileName = "$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
         // Create multipart body with 'stateFile' field name (matching Python code)
-        val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
         val multipartBody = MultipartBody.Part.createFormData(
             name = "stateFile",
             filename = timestampedFileName,
