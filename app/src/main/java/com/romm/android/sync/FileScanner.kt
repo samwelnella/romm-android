@@ -230,11 +230,11 @@ class FileScanner @Inject constructor(
         
         val emulator = when {
             pathParts.size >= 2 -> {
-                // Second part might be emulator
-                identifyEmulator(pathParts[0])
+                // Second part is emulator: [PLATFORM_NAME]/[EMULATOR_NAME]/savefile
+                identifyEmulator(pathParts[1])
             }
             pathParts.size == 1 -> {
-                // First part might be emulator
+                // First part might be emulator if no platform folder
                 identifyEmulator(pathParts[0])
             }
             else -> null

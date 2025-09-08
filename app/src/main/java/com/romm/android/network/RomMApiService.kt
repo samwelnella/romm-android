@@ -7,8 +7,6 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import androidx.documentfile.provider.DocumentFile
@@ -89,7 +87,7 @@ interface RomMApi {
     suspend fun uploadSaveFile(
         @Query("rom_id") romId: Int,
         @Query("emulator") emulator: String?,
-        @Part file: MultipartBody.Part
+        @Part saveFile: MultipartBody.Part
     ): SaveFile
     
     @Multipart
@@ -97,21 +95,19 @@ interface RomMApi {
     suspend fun uploadSaveState(
         @Query("rom_id") romId: Int,
         @Query("emulator") emulator: String?,
-        @Part file: MultipartBody.Part
+        @Part stateFile: MultipartBody.Part
     ): SaveState
     
-    @Multipart
     @PUT("api/saves/{id}")
     suspend fun updateSaveFile(
         @Path("id") id: Int,
-        @Part file: MultipartBody.Part
+        @Body file: RequestBody
     ): SaveFile
     
-    @Multipart
     @PUT("api/states/{id}")
     suspend fun updateSaveState(
         @Path("id") id: Int,
-        @Part file: MultipartBody.Part
+        @Body file: RequestBody
     ): SaveState
     
 }
@@ -323,134 +319,69 @@ class RomMApiService @Inject constructor(
         
         android.util.Log.d("RomMApiService", "Attempting to upload save file: $fileName")
         android.util.Log.d("RomMApiService", "DocumentFile URI: ${documentFile.uri}")
-        android.util.Log.d("RomMApiService", "DocumentFile exists: ${documentFile.exists()}")
-        android.util.Log.d("RomMApiService", "DocumentFile isFile: ${documentFile.isFile}")
-        android.util.Log.d("RomMApiService", "DocumentFile canRead: ${documentFile.canRead()}")
-        android.util.Log.d("RomMApiService", "DocumentFile length: ${documentFile.length()}")
-        android.util.Log.d("RomMApiService", "DocumentFile type: ${documentFile.type}")
+        android.util.Log.d("RomMApiService", "ROM ID: $romId")
+        android.util.Log.d("RomMApiService", "Emulator: $emulator")
         
-        // Try to get more info about URI permissions
-        val uriString = documentFile.uri.toString()
-        android.util.Log.d("RomMApiService", "URI string: $uriString")
-        android.util.Log.d("RomMApiService", "URI scheme: ${documentFile.uri.scheme}")
-        android.util.Log.d("RomMApiService", "URI authority: ${documentFile.uri.authority}")
-        android.util.Log.d("RomMApiService", "URI path: ${documentFile.uri.path}")
-        
-        // Check if we have permissions to read this URI
-        val persistedUris = applicationContext.contentResolver.persistedUriPermissions
-        android.util.Log.d("RomMApiService", "Persisted URI permissions: ${persistedUris.size}")
-        persistedUris.forEach { permission ->
-            android.util.Log.d("RomMApiService", "  Permission: ${permission.uri} (read: ${permission.isReadPermission}, write: ${permission.isWritePermission})")
-        }
-        
-        // Try multiple approaches to read the file content
+        // Use standard Storage Access Framework approach
         val bytes = try {
-            // First approach: Direct content resolver access
-            android.util.Log.d("RomMApiService", "Attempting direct ContentResolver access...")
-            val inputStream = applicationContext.contentResolver.openInputStream(documentFile.uri)
-            
-            if (inputStream == null) {
-                android.util.Log.e("RomMApiService", "Input stream is null for ${documentFile.uri}")
-                throw IllegalArgumentException("Cannot open file input stream for ${documentFile.uri}")
-            }
-            
-            val data = inputStream.use { stream ->
-                android.util.Log.d("RomMApiService", "Reading bytes from input stream...")
-                val result = try {
-                    stream.readBytes()
-                } catch (e: Exception) {
-                    android.util.Log.e("RomMApiService", "Error reading bytes from stream", e)
-                    throw IllegalArgumentException("Error reading file content: ${e.message}")
-                }
-                
-                android.util.Log.d("RomMApiService", "Read ${result.size} bytes from stream")
-                
-                // Log first few bytes to debug what we're actually reading
-                if (result.size > 0) {
-                    val preview = result.take(50).joinToString(" ") { byte -> "%02x".format(byte) }
-                    android.util.Log.d("RomMApiService", "First 50 bytes (hex): $preview")
-                    
-                    // Also check if it's text (like JSON error)
-                    val text = try {
-                        String(result.take(100).toByteArray(), Charsets.UTF_8)
-                    } catch (e: Exception) {
-                        "binary data"
-                    }
-                    android.util.Log.d("RomMApiService", "Content preview (as text): $text")
-                }
-                
-                result
-            }
-            
-            // Validate that we didn't get an error response
-            if (data.isNotEmpty()) {
-                val content = try {
-                    String(data, Charsets.UTF_8)
-                } catch (e: Exception) {
-                    null
-                }
-                
-                if (content != null && content.contains("status_code") && content.contains("Asset not found")) {
-                    android.util.Log.e("RomMApiService", "Got JSON error response instead of file content: $content")
-                    throw IllegalArgumentException("Storage Access Framework returned JSON error instead of file content")
-                }
-            }
-            
-            data
-            
+            applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
+                inputStream.readBytes()
+            } ?: throw IllegalArgumentException("Could not open input stream")
         } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Primary file access failed: ${e.message}")
+            android.util.Log.e("RomMApiService", "Failed to read file: ${e.message}")
+            throw IllegalArgumentException("Failed to read file: ${e.message}")
+        }
+        
+        android.util.Log.d("RomMApiService", "Read ${bytes.size} bytes from file")
+        
+        // Debug: Check if we're getting actual binary data or JSON error
+        if (bytes.size > 10) {
+            val preview = bytes.take(20).joinToString(" ") { byte -> "%02x".format(byte) }
+            android.util.Log.d("RomMApiService", "First 20 bytes (hex): $preview")
             
-            // Second approach: Try alternative URI construction
-            android.util.Log.d("RomMApiService", "Attempting alternative URI construction...")
-            try {
-                // Try to construct a direct document URI instead of using the tree-based navigation
-                val uriString = documentFile.uri.toString()
-                android.util.Log.d("RomMApiService", "Original URI: $uriString")
-                
-                // Convert tree-based URI to document URI if needed
-                val alternativeUri = if (uriString.contains("/tree/") && uriString.contains("/document/")) {
-                    // Extract the document part and create a direct document URI
-                    val documentPart = uriString.substringAfter("/document/")
-                    val authority = documentFile.uri.authority
-                    val directUri = android.net.Uri.parse("content://$authority/document/$documentPart")
-                    android.util.Log.d("RomMApiService", "Trying direct document URI: $directUri")
-                    directUri
-                } else {
-                    documentFile.uri
-                }
-                
-                val alternativeInputStream = applicationContext.contentResolver.openInputStream(alternativeUri)
-                if (alternativeInputStream == null) {
-                    android.util.Log.e("RomMApiService", "Alternative input stream is also null")
-                    throw IllegalArgumentException("Cannot open file input stream with alternative approach")
-                }
-                
-                val alternativeData = alternativeInputStream.use { stream ->
-                    android.util.Log.d("RomMApiService", "Reading bytes from alternative input stream...")
-                    stream.readBytes()
-                }
-                
-                android.util.Log.d("RomMApiService", "Alternative approach succeeded, read ${alternativeData.size} bytes")
-                alternativeData
-                
-            } catch (alternativeException: Exception) {
-                android.util.Log.e("RomMApiService", "Alternative approach also failed: ${alternativeException.message}")
-                throw IllegalArgumentException("Both primary and alternative file access methods failed. Original error: ${e.message}, Alternative error: ${alternativeException.message}")
+            val text = try {
+                String(bytes.take(100).toByteArray(), Charsets.UTF_8)
+            } catch (e: Exception) {
+                "binary data"
+            }
+            android.util.Log.d("RomMApiService", "Content preview (first 100 chars): $text")
+            
+            // Check if we're still getting JSON error
+            if (text.contains("status_code") && text.contains("Asset not found")) {
+                android.util.Log.e("RomMApiService", "File content is JSON error instead of save data!")
+                throw IllegalArgumentException("File contains error response instead of save data: $text")
             }
         }
         
-        android.util.Log.d("RomMApiService", "Final byte array size: ${bytes.size}")
+        // Create filename with file's last modified timestamp
+        val baseNameWithoutExt = fileName.substringBeforeLast(".")
+        val extension = fileName.substringAfterLast(".", "")
+        val lastModifiedTime = documentFile.lastModified()
+        val timestamp = java.time.LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(lastModifiedTime),
+            java.time.ZoneId.systemDefault()
+        ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
+        val timestampedFileName = "$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
+        // Create multipart body with 'saveFile' field name (matching Python code)
         val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
-        
         val multipartBody = MultipartBody.Part.createFormData(
-            "file",
-            fileName,
-            requestBody
+            name = "saveFile",
+            filename = timestampedFileName,
+            body = requestBody
         )
         
-        android.util.Log.d("RomMApiService", "Created multipart body with name 'file' for $fileName")
+        android.util.Log.d("RomMApiService", "Created multipart body:")
+        android.util.Log.d("RomMApiService", "  - Field name: saveFile")
+        android.util.Log.d("RomMApiService", "  - Original filename: $fileName")
+        android.util.Log.d("RomMApiService", "  - Timestamped filename: $timestampedFileName")
+        android.util.Log.d("RomMApiService", "  - Content type: application/octet-stream")
+        android.util.Log.d("RomMApiService", "  - Content length: ${bytes.size} bytes")
+        
+        // Check API endpoint parameters
+        android.util.Log.d("RomMApiService", "API call parameters:")
+        android.util.Log.d("RomMApiService", "  - rom_id: $romId")
+        android.util.Log.d("RomMApiService", "  - emulator: $emulator")
         
         return getApi().uploadSaveFile(romId, emulator, multipartBody)
     }
@@ -461,16 +392,37 @@ class RomMApiService @Inject constructor(
         documentFile: DocumentFile
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
-        val inputStream = applicationContext.contentResolver.openInputStream(documentFile.uri)
-            ?: throw IllegalArgumentException("Cannot open file input stream")
         
-        val bytes = inputStream.use { it.readBytes() }
+        // Use ParcelFileDescriptor approach for consistency with uploadSaveFile
+        val bytes = try {
+            val pfd = applicationContext.contentResolver.openFileDescriptor(documentFile.uri, "r")
+                ?: throw IllegalArgumentException("Cannot open file descriptor")
+            
+            pfd.use { fileDescriptor ->
+                val fileInputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
+                fileInputStream.use { it.readBytes() }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("RomMApiService", "Failed to read save state file: ${e.message}")
+            throw IllegalArgumentException("Failed to read save state file: ${e.message}")
+        }
+        
+        // Create filename with file's last modified timestamp
+        val baseNameWithoutExt = fileName.substringBeforeLast(".")
+        val extension = fileName.substringAfterLast(".", "")
+        val lastModifiedTime = documentFile.lastModified()
+        val timestamp = java.time.LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(lastModifiedTime),
+            java.time.ZoneId.systemDefault()
+        ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
+        val timestampedFileName = "$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
+        
+        // Create multipart body with 'stateFile' field name (matching Python code)
         val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
-        
         val multipartBody = MultipartBody.Part.createFormData(
-            "file",
-            fileName,
-            requestBody
+            name = "stateFile",
+            filename = timestampedFileName,
+            body = requestBody
         )
         
         return getApi().uploadSaveState(romId, emulator, multipartBody)
@@ -481,19 +433,24 @@ class RomMApiService @Inject constructor(
         documentFile: DocumentFile
     ): SaveFile {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
-        val inputStream = applicationContext.contentResolver.openInputStream(documentFile.uri)
-            ?: throw IllegalArgumentException("Cannot open file input stream")
         
-        val bytes = inputStream.use { it.readBytes() }
+        // Use ParcelFileDescriptor approach for consistency
+        val bytes = try {
+            val pfd = applicationContext.contentResolver.openFileDescriptor(documentFile.uri, "r")
+                ?: throw IllegalArgumentException("Cannot open file descriptor")
+            
+            pfd.use { fileDescriptor ->
+                val fileInputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
+                fileInputStream.use { it.readBytes() }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("RomMApiService", "Failed to read save file for update: ${e.message}")
+            throw IllegalArgumentException("Failed to read save file for update: ${e.message}")
+        }
+        
         val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
         
-        val multipartBody = MultipartBody.Part.createFormData(
-            "file",
-            fileName,
-            requestBody
-        )
-        
-        return getApi().updateSaveFile(saveFileId, multipartBody)
+        return getApi().updateSaveFile(saveFileId, requestBody)
     }
     
     suspend fun updateSaveState(
@@ -501,18 +458,24 @@ class RomMApiService @Inject constructor(
         documentFile: DocumentFile
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
-        val inputStream = applicationContext.contentResolver.openInputStream(documentFile.uri)
-            ?: throw IllegalArgumentException("Cannot open file input stream")
         
-        val bytes = inputStream.use { it.readBytes() }
+        // Use ParcelFileDescriptor approach for consistency
+        val bytes = try {
+            val pfd = applicationContext.contentResolver.openFileDescriptor(documentFile.uri, "r")
+                ?: throw IllegalArgumentException("Cannot open file descriptor")
+            
+            pfd.use { fileDescriptor ->
+                val fileInputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
+                fileInputStream.use { it.readBytes() }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("RomMApiService", "Failed to read save state for update: ${e.message}")
+            throw IllegalArgumentException("Failed to read save state for update: ${e.message}")
+        }
+        
         val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
         
-        val multipartBody = MultipartBody.Part.createFormData(
-            "file",
-            fileName,
-            requestBody
-        )
-        
-        return getApi().updateSaveState(saveStateId, multipartBody)
+        return getApi().updateSaveState(saveStateId, requestBody)
     }
+    
 }
