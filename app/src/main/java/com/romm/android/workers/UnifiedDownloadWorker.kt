@@ -707,7 +707,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             return Result.failure()
         }
         
-        // Get save file metadata first, then download using assets endpoint
+        // Get save file metadata first, then download using properly encoded URLs
         val saveFile = apiService.getSave(saveId)
         val response = apiService.downloadSaveFile(saveFile)
         
@@ -778,7 +778,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             return Result.failure()
         }
         
-        // Get save state metadata first, then download using assets endpoint
+        // Get save state metadata first, then download using properly encoded URLs
         val saveState = apiService.getState(stateId)
         val response = apiService.downloadSaveState(saveState)
         

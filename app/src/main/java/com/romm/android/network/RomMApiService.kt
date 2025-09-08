@@ -34,6 +34,9 @@ interface RomMApi {
     @GET("api/roms/{id}")
     suspend fun getGame(@Path("id") id: Int): Game
     
+    @GET("api/roms/{id}")
+    suspend fun getDetailedGame(@Path("id") id: Int): DetailedGame
+    
     @Streaming
     @GET("api/roms/{id}/content/{fileName}")
     suspend fun downloadGame(
@@ -77,6 +80,12 @@ interface RomMApi {
     @GET("{path}")
     suspend fun downloadFromPath(
         @Path("path", encoded = true) path: String
+    ): Response<ResponseBody>
+    
+    @Streaming
+    @GET
+    suspend fun downloadFromUrl(
+        @Url url: String
     ): Response<ResponseBody>
     
     @GET("api/states")
@@ -287,9 +296,21 @@ class RomMApiService @Inject constructor(
     
     suspend fun downloadSaveFile(saveFile: com.romm.android.data.SaveFile): Response<ResponseBody> {
         // Use the download_path directly as provided by the server metadata
-        val downloadPath = saveFile.download_path ?: "/api/raw/assets/${saveFile.file_path}"
-        android.util.Log.d("RomMApiService", "Downloading save file from: $downloadPath")
-        return getApi().downloadFromPath(downloadPath)
+        val rawDownloadPath = saveFile.download_path ?: "/api/raw/assets/${saveFile.file_path}"
+        
+        // URL encode the path properly
+        val encodedPath = encodeDownloadPath(rawDownloadPath)
+        
+        // Get the base URL from current settings to construct full URL
+        val settings = settingsRepository.getCurrentSettings()
+        val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
+        val fullUrl = "$baseUrl$encodedPath"
+        
+        android.util.Log.d("RomMApiService", "Raw download path: $rawDownloadPath")
+        android.util.Log.d("RomMApiService", "Encoded download path: $encodedPath")
+        android.util.Log.d("RomMApiService", "Full URL: $fullUrl")
+        
+        return getApi().downloadFromUrl(fullUrl)
     }
     
     suspend fun getStates(
@@ -311,8 +332,72 @@ class RomMApiService @Inject constructor(
     
     suspend fun downloadSaveState(saveState: com.romm.android.data.SaveState): Response<ResponseBody> {
         // Use the download_path directly as provided by the server metadata
-        val downloadPath = saveState.download_path ?: "/api/raw/assets/${saveState.file_path}"
-        android.util.Log.d("RomMApiService", "Downloading save state from: $downloadPath")
+        val rawDownloadPath = saveState.download_path ?: "/api/raw/assets/${saveState.file_path}"
+        
+        // URL encode the path properly
+        val encodedPath = encodeDownloadPath(rawDownloadPath)
+        
+        // Get the base URL from current settings to construct full URL
+        val settings = settingsRepository.getCurrentSettings()
+        val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
+        val fullUrl = "$baseUrl$encodedPath"
+        
+        android.util.Log.d("RomMApiService", "Raw download path: $rawDownloadPath")
+        android.util.Log.d("RomMApiService", "Encoded download path: $encodedPath")
+        android.util.Log.d("RomMApiService", "Full URL: $fullUrl")
+        
+        return getApi().downloadFromUrl(fullUrl)
+    }
+    
+    suspend fun downloadSaveFileFromRomMetadata(romId: Int, fileExtension: String): Response<ResponseBody>? {
+        android.util.Log.d("RomMApiService", "Getting ROM details for ROM ID: $romId")
+        val detailedGame = getApi().getDetailedGame(romId)
+        
+        // Find matching save file by extension
+        val matchingFiles = detailedGame.user_saves?.filter { saveFile ->
+            saveFile.file_name.lowercase().endsWith(fileExtension.lowercase())
+        } ?: emptyList()
+        
+        if (matchingFiles.isEmpty()) {
+            android.util.Log.w("RomMApiService", "No save files with extension $fileExtension found for ROM $romId")
+            return null
+        }
+        
+        // Sort by filename (later timestamps last) and pick the most recent
+        val latestFile = matchingFiles.sortedByDescending { it.file_name }.first()
+        android.util.Log.d("RomMApiService", "Latest save file: ${latestFile.file_name}")
+        android.util.Log.d("RomMApiService", "Expected size: ${latestFile.file_size_bytes} bytes")
+        
+        // Use download_path from metadata
+        val downloadPath = latestFile.download_path ?: "/api/raw/assets/${latestFile.file_path}"
+        android.util.Log.d("RomMApiService", "Downloading from: $downloadPath")
+        
+        return getApi().downloadFromPath(downloadPath)
+    }
+    
+    suspend fun downloadSaveStateFromRomMetadata(romId: Int, fileExtension: String): Response<ResponseBody>? {
+        android.util.Log.d("RomMApiService", "Getting ROM details for ROM ID: $romId")
+        val detailedGame = getApi().getDetailedGame(romId)
+        
+        // Find matching save state by extension
+        val matchingFiles = detailedGame.user_states?.filter { saveState ->
+            saveState.file_name.lowercase().endsWith(fileExtension.lowercase())
+        } ?: emptyList()
+        
+        if (matchingFiles.isEmpty()) {
+            android.util.Log.w("RomMApiService", "No save states with extension $fileExtension found for ROM $romId")
+            return null
+        }
+        
+        // Sort by filename (later timestamps last) and pick the most recent
+        val latestFile = matchingFiles.sortedByDescending { it.file_name }.first()
+        android.util.Log.d("RomMApiService", "Latest save state: ${latestFile.file_name}")
+        android.util.Log.d("RomMApiService", "Expected size: ${latestFile.file_size_bytes} bytes")
+        
+        // Use download_path from metadata
+        val downloadPath = latestFile.download_path ?: "/api/raw/assets/${latestFile.file_path}"
+        android.util.Log.d("RomMApiService", "Downloading from: $downloadPath")
+        
         return getApi().downloadFromPath(downloadPath)
     }
     
@@ -482,6 +567,46 @@ class RomMApiService @Inject constructor(
         val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
         
         return getApi().updateSaveState(saveStateId, requestBody)
+    }
+    
+    private fun encodeDownloadPath(rawPath: String): String {
+        // Split the path and query parameters
+        val parts = rawPath.split("?")
+        val path = parts[0]
+        val queryString = if (parts.size > 1) parts[1] else null
+        
+        // Split path into segments and encode each segment individually
+        val pathSegments = path.split("/")
+        val encodedSegments = pathSegments.map { segment ->
+            if (segment.isEmpty()) {
+                segment
+            } else {
+                // URL encode the segment, but be careful with already-encoded characters
+                java.net.URLEncoder.encode(segment, "UTF-8")
+                    .replace("+", "%20") // URLEncoder uses + for spaces, but we want %20
+            }
+        }
+        
+        // Reconstruct the path
+        val encodedPath = encodedSegments.joinToString("/")
+        
+        // Add back query string if it exists (encode query parameters too)
+        return if (queryString != null) {
+            val encodedQuery = queryString.split("&").joinToString("&") { param ->
+                val keyValue = param.split("=")
+                if (keyValue.size == 2) {
+                    val key = keyValue[0]
+                    val value = java.net.URLEncoder.encode(keyValue[1], "UTF-8")
+                        .replace("+", "%20")
+                    "$key=$value"
+                } else {
+                    param
+                }
+            }
+            "$encodedPath?$encodedQuery"
+        } else {
+            encodedPath
+        }
     }
     
 }
