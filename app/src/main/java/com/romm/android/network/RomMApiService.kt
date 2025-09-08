@@ -73,6 +73,12 @@ interface RomMApi {
         @Path("path", encoded = true) path: String
     ): Response<ResponseBody>
     
+    @Streaming
+    @GET("{path}")
+    suspend fun downloadFromPath(
+        @Path("path", encoded = true) path: String
+    ): Response<ResponseBody>
+    
     @GET("api/states")
     suspend fun getStates(
         @Query("rom_id") romId: Int? = null,
@@ -280,10 +286,10 @@ class RomMApiService @Inject constructor(
     }
     
     suspend fun downloadSaveFile(saveFile: com.romm.android.data.SaveFile): Response<ResponseBody> {
-        // The download_path already includes /api/raw/assets/, so we need to strip that prefix
-        val assetPath = saveFile.download_path?.removePrefix("/api/raw/assets/") 
-            ?: saveFile.file_path
-        return getApi().downloadAsset(assetPath)
+        // Use the download_path directly as provided by the server metadata
+        val downloadPath = saveFile.download_path ?: "/api/raw/assets/${saveFile.file_path}"
+        android.util.Log.d("RomMApiService", "Downloading save file from: $downloadPath")
+        return getApi().downloadFromPath(downloadPath)
     }
     
     suspend fun getStates(
@@ -304,10 +310,10 @@ class RomMApiService @Inject constructor(
     }
     
     suspend fun downloadSaveState(saveState: com.romm.android.data.SaveState): Response<ResponseBody> {
-        // The download_path already includes /api/raw/assets/, so we need to strip that prefix
-        val assetPath = saveState.download_path?.removePrefix("/api/raw/assets/") 
-            ?: saveState.file_path
-        return getApi().downloadAsset(assetPath)
+        // Use the download_path directly as provided by the server metadata
+        val downloadPath = saveState.download_path ?: "/api/raw/assets/${saveState.file_path}"
+        android.util.Log.d("RomMApiService", "Downloading save state from: $downloadPath")
+        return getApi().downloadFromPath(downloadPath)
     }
     
     suspend fun uploadSaveFile(
