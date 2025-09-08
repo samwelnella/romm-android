@@ -130,22 +130,27 @@ class FileScanner @Inject constructor(
                         
                         Log.d("FileScanner", "Syncable file: $fileName -> Platform: ${metadata.platform}, Emulator: ${metadata.emulator}")
                         
-                        items.add(
-                            LocalSyncItem(
-                                file = File(file.uri.path ?: ""), // This might not be a real path
-                                type = type,
-                                platform = metadata.platform,
-                                emulator = metadata.emulator,
-                                gameName = metadata.gameName,
-                                fileName = fileName,
-                                lastModified = LocalDateTime.ofInstant(
-                                    Instant.ofEpochMilli(file.lastModified()),
-                                    ZoneId.systemDefault()
-                                ),
-                                sizeBytes = fileSize,
-                                relativePathFromBaseDir = if (basePath.isEmpty()) fileName else "$basePath/$fileName"
+                        // Only sync files from known/whitelisted emulators
+                        if (EmulatorMapper.isKnownEmulator(metadata.emulator)) {
+                            items.add(
+                                LocalSyncItem(
+                                    file = File(file.uri.path ?: ""), // This might not be a real path
+                                    type = type,
+                                    platform = metadata.platform,
+                                    emulator = metadata.emulator,
+                                    gameName = metadata.gameName,
+                                    fileName = fileName,
+                                    lastModified = LocalDateTime.ofInstant(
+                                        Instant.ofEpochMilli(file.lastModified()),
+                                        ZoneId.systemDefault()
+                                    ),
+                                    sizeBytes = fileSize,
+                                    relativePathFromBaseDir = if (basePath.isEmpty()) fileName else "$basePath/$fileName"
+                                )
                             )
-                        )
+                        } else {
+                            Log.d("FileScanner", "  -> Skipped: emulator '${metadata.emulator}' is not whitelisted for sync")
+                        }
                     } else {
                         Log.d("FileScanner", "File '$fileName' is not syncable for type $type")
                     }
@@ -297,29 +302,7 @@ class FileScanner @Inject constructor(
     }
     
     private fun identifyEmulator(directoryName: String): String? {
-        val lower = directoryName.lowercase()
-        return when {
-            lower.contains("retroarch") -> "RetroArch"
-            lower.contains("snes9x") -> "Snes9x"
-            lower.contains("zsnes") -> "ZSNES"
-            lower.contains("bsnes") -> "bsnes"
-            lower.contains("nestopia") -> "Nestopia"
-            lower.contains("fceux") -> "FCEUX"
-            lower.contains("mupen64") -> "Mupen64Plus"
-            lower.contains("project64") -> "Project64"
-            lower.contains("dolphin") -> "Dolphin"
-            lower.contains("visualboy") -> "VisualBoy Advance"
-            lower.contains("mgba") -> "mGBA"
-            lower.contains("desmume") -> "DeSmuME"
-            lower.contains("pcsx2") -> "PCSX2"
-            lower.contains("ppsspp") -> "PPSSPP"
-            lower.contains("epsxe") -> "ePSXe"
-            lower.contains("mednafen") -> "Mednafen"
-            lower.contains("mame") -> "MAME"
-            lower.contains("gens") -> "Gens"
-            lower.contains("fusion") -> "Fusion"
-            else -> null
-        }
+        return EmulatorMapper.identifyEmulator(directoryName)
     }
     
     private fun inferPlatformFromFilename(fileName: String): String {
