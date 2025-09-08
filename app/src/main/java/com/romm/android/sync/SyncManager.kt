@@ -674,25 +674,14 @@ class SyncManager @Inject constructor(
             Log.d("SyncManager", "    gameName: '$gameName'")
             Log.d("SyncManager", "    baseFileName: '$baseFileNameLower'")
             
-            // Try different matching strategies
+            // Match only by comparing save/state filename (no ext) with ROM fs_name_no_ext
             val matchedGame = games.find { game ->
-                val nameMatchWithGameName = game.name?.lowercase() == gameName
-                val fsNameNoExtMatchWithGameName = game.fs_name_no_ext.lowercase() == gameName
-                val nameMatchWithFileName = game.name?.lowercase() == baseFileNameLower
                 val fsNameNoExtMatchWithFileName = game.fs_name_no_ext.lowercase() == baseFileNameLower
-                val fsNameStartsMatchWithFileName = game.fs_name.lowercase().startsWith(baseFileNameLower)
                 
-                if (game.name?.lowercase()?.contains("stellvia") == true) {
-                    Log.d("SyncManager", "    STELLVIA GAME FOUND: '${game.name}' / '${game.fs_name_no_ext}' / '${game.fs_name}'")
-                    Log.d("SyncManager", "      nameMatchWithGameName: $nameMatchWithGameName")
-                    Log.d("SyncManager", "      fsNameNoExtMatchWithGameName: $fsNameNoExtMatchWithGameName") 
-                    Log.d("SyncManager", "      nameMatchWithFileName: $nameMatchWithFileName")
-                    Log.d("SyncManager", "      fsNameNoExtMatchWithFileName: $fsNameNoExtMatchWithFileName")
-                    Log.d("SyncManager", "      fsNameStartsMatchWithFileName: $fsNameStartsMatchWithFileName")
-                }
+                Log.d("SyncManager", "    Checking game: '${game.name}' / fs_name_no_ext: '${game.fs_name_no_ext}'")
+                Log.d("SyncManager", "      Match with baseFileName: $fsNameNoExtMatchWithFileName")
                 
-                nameMatchWithGameName || fsNameNoExtMatchWithGameName || 
-                nameMatchWithFileName || fsNameNoExtMatchWithFileName || fsNameStartsMatchWithFileName
+                fsNameNoExtMatchWithFileName
             }
             
             if (matchedGame != null) {
