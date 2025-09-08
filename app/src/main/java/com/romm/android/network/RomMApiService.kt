@@ -436,7 +436,7 @@ class RomMApiService @Inject constructor(
             }
         }
         
-        // Create filename with file's last modified timestamp
+        // Create filename with android-sync- prefix and timestamp
         val baseNameWithoutExt = fileName.substringBeforeLast(".")
         val extension = fileName.substringAfterLast(".", "")
         val lastModifiedTime = documentFile.lastModified()
@@ -444,7 +444,7 @@ class RomMApiService @Inject constructor(
             java.time.Instant.ofEpochMilli(lastModifiedTime),
             java.time.ZoneId.systemDefault()
         ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
-        val timestampedFileName = "$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
+        val timestampedFileName = "android-sync-$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
         // Create multipart body with 'saveFile' field name (matching Python code)
         val multipartBody = MultipartBody.Part.createFormData(
@@ -455,16 +455,12 @@ class RomMApiService @Inject constructor(
         
         android.util.Log.d("RomMApiService", "Created multipart body: $timestampedFileName")
         
-        // Prepend "android-sync-" to emulator name for identification
-        val androidSyncEmulator = if (emulator != null) "android-sync-$emulator" else "android-sync"
-        
-        // Check API endpoint parameters
         android.util.Log.d("RomMApiService", "API call parameters:")
         android.util.Log.d("RomMApiService", "  - rom_id: $romId")
-        android.util.Log.d("RomMApiService", "  - original emulator: $emulator")
-        android.util.Log.d("RomMApiService", "  - android-sync emulator: $androidSyncEmulator")
+        android.util.Log.d("RomMApiService", "  - emulator: $emulator")
+        android.util.Log.d("RomMApiService", "  - filename (with android-sync- prefix): $timestampedFileName")
         
-        return getApi().uploadSaveFile(romId, androidSyncEmulator, multipartBody)
+        return getApi().uploadSaveFile(romId, emulator, multipartBody)
     }
     
     suspend fun uploadSaveState(
@@ -509,7 +505,7 @@ class RomMApiService @Inject constructor(
             java.time.Instant.ofEpochMilli(lastModifiedTime),
             java.time.ZoneId.systemDefault()
         ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
-        val timestampedFileName = "$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
+        val timestampedFileName = "android-sync-$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
         // Create multipart body with 'stateFile' field name (matching Python code)
         val multipartBody = MultipartBody.Part.createFormData(
@@ -518,14 +514,11 @@ class RomMApiService @Inject constructor(
             body = requestBody
         )
         
-        // Prepend "android-sync-" to emulator name for identification
-        val androidSyncEmulator = if (emulator != null) "android-sync-$emulator" else "android-sync"
-        
         android.util.Log.d("RomMApiService", "Save state upload:")
-        android.util.Log.d("RomMApiService", "  - original emulator: $emulator")
-        android.util.Log.d("RomMApiService", "  - android-sync emulator: $androidSyncEmulator")
+        android.util.Log.d("RomMApiService", "  - emulator: $emulator")
+        android.util.Log.d("RomMApiService", "  - filename (with android-sync- prefix): $timestampedFileName")
         
-        return getApi().uploadSaveState(romId, androidSyncEmulator, multipartBody)
+        return getApi().uploadSaveState(romId, emulator, multipartBody)
     }
     
     suspend fun updateSaveFile(

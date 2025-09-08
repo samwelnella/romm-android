@@ -849,13 +849,20 @@ class UnifiedDownloadWorker @AssistedInject constructor(
     }
     
     /**
-     * Strip timestamp from filename to get original game filename
-     * Converts: "Metroid - Zero Mission (Europe) (En,Fr,De,Es,It) [2025-09-05 23-17-09-884].srm"
+     * Strip timestamp and android-sync- prefix from filename to get original game filename
+     * Converts: "android-sync-Metroid - Zero Mission (Europe) (En,Fr,De,Es,It) [2025-09-05 23-17-09-884].srm"
      * To: "Metroid - Zero Mission (Europe) (En,Fr,De,Es,It).srm"
      */
     private fun stripTimestampFromFilename(fileName: String): String {
-        // Pattern matches: anything followed by " [YYYY-MM-DD HH-mm-ss-SSS]" followed by optional extension
+        // First remove timestamp pattern
         val timestampPattern = Regex("""\s\[\d{4}-\d{2}-\d{2}\s\d{2}-\d{2}-\d{2}-\d{3}\]""")
-        return fileName.replace(timestampPattern, "")
+        val withoutTimestamp = fileName.replace(timestampPattern, "")
+        
+        // Then remove android-sync- prefix if present
+        return if (withoutTimestamp.startsWith("android-sync-")) {
+            withoutTimestamp.removePrefix("android-sync-")
+        } else {
+            withoutTimestamp
+        }
     }
 }
