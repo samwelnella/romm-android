@@ -405,13 +405,14 @@ class RomMApiService @Inject constructor(
     suspend fun uploadSaveFile(
         romId: Int,
         emulator: String?,
-        documentFile: DocumentFile
+        documentFile: DocumentFile,
+        onProgress: ((Long, Long) -> Unit)? = null
     ): SaveFile {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
         android.util.Log.d("RomMApiService", "Uploading save file: $fileName (${documentFile.length()} bytes)")
         
-        // Create streaming request body instead of reading entire file into memory
+        // Create streaming request body with progress callback
         val requestBody = object : RequestBody() {
             override fun contentType() = "application/octet-stream".toMediaType()
             
@@ -419,7 +420,18 @@ class RomMApiService @Inject constructor(
             
             override fun writeTo(sink: okio.BufferedSink) {
                 applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
-                    sink.writeAll(inputStream.source())
+                    val totalBytes = contentLength()
+                    var bytesWritten = 0L
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    
+                    onProgress?.invoke(0, totalBytes)
+                    
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        sink.write(buffer, 0, bytesRead)
+                        bytesWritten += bytesRead
+                        onProgress?.invoke(bytesWritten, totalBytes)
+                    }
                 } ?: throw IllegalArgumentException("Could not open input stream")
             }
         }
@@ -458,13 +470,14 @@ class RomMApiService @Inject constructor(
     suspend fun uploadSaveState(
         romId: Int,
         emulator: String?,
-        documentFile: DocumentFile
+        documentFile: DocumentFile,
+        onProgress: ((Long, Long) -> Unit)? = null
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
         android.util.Log.d("RomMApiService", "Uploading save state: $fileName (${documentFile.length()} bytes)")
         
-        // Create streaming request body instead of reading entire file into memory
+        // Create streaming request body with progress callback
         val requestBody = object : RequestBody() {
             override fun contentType() = "application/octet-stream".toMediaType()
             
@@ -472,7 +485,18 @@ class RomMApiService @Inject constructor(
             
             override fun writeTo(sink: okio.BufferedSink) {
                 applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
-                    sink.writeAll(inputStream.source())
+                    val totalBytes = contentLength()
+                    var bytesWritten = 0L
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    
+                    onProgress?.invoke(0, totalBytes)
+                    
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        sink.write(buffer, 0, bytesRead)
+                        bytesWritten += bytesRead
+                        onProgress?.invoke(bytesWritten, totalBytes)
+                    }
                 } ?: throw IllegalArgumentException("Could not open input stream")
             }
         }

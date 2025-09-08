@@ -139,7 +139,21 @@ class SyncManager @Inject constructor(
                         errors = errors.toList()
                     ))
                     
-                    val success = performUpload(comparison, settings)
+                    val success = performUpload(comparison, settings) { bytesUploaded, totalBytes ->
+                        val progress = if (totalBytes > 0) bytesUploaded.toFloat() / totalBytes else 0f
+                        onProgress(SyncProgress(
+                            currentStep = "Uploading ${comparison.localItem?.fileName}...",
+                            itemsProcessed = processedItems,
+                            totalItems = totalItems,
+                            bytesTransferred = bytesTransferred,
+                            totalBytes = totalBytes,
+                            isComplete = false,
+                            hasErrors = errors.isNotEmpty(),
+                            errors = errors.toList(),
+                            currentFileProgress = progress,
+                            currentFileName = comparison.localItem?.fileName
+                        ))
+                    }
                     if (success) {
                         uploadedCount++
                         bytesTransferred += comparison.localItem?.sizeBytes ?: 0
@@ -552,7 +566,11 @@ class SyncManager @Inject constructor(
         }
     }
     
-    private suspend fun performUpload(comparison: SyncComparison, settings: AppSettings): Boolean {
+    private suspend fun performUpload(
+        comparison: SyncComparison, 
+        settings: AppSettings,
+        onProgress: ((Long, Long) -> Unit)? = null
+    ): Boolean {
         val localItem = comparison.localItem ?: return false
         val remoteItem = comparison.remoteItem
         
@@ -592,7 +610,7 @@ class SyncManager @Inject constructor(
                         apiService.updateSaveFile(remoteItem.id, documentFile)
                     } else {
                         // Create new
-                        apiService.uploadSaveFile(romId, localItem.emulator, documentFile)
+                        apiService.uploadSaveFile(romId, localItem.emulator, documentFile, onProgress)
                     }
                 }
                 SyncItemType.SAVE_STATE -> {
@@ -601,7 +619,7 @@ class SyncManager @Inject constructor(
                         apiService.updateSaveState(remoteItem.id, documentFile)
                     } else {
                         // Create new
-                        apiService.uploadSaveState(romId, localItem.emulator, documentFile)
+                        apiService.uploadSaveState(romId, localItem.emulator, documentFile, onProgress)
                     }
                 }
             }

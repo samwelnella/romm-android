@@ -450,7 +450,7 @@ fun SyncProgressDisplay(progress: SyncProgress) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         CircularProgressIndicator(
-            progress = progress.progressPercent / 100f,
+            progress = { progress.overallProgressPercent / 100f },
             modifier = Modifier.size(80.dp)
         )
         
@@ -465,6 +465,32 @@ fun SyncProgressDisplay(progress: SyncProgress) {
             "${progress.itemsProcessed} of ${progress.totalItems}",
             style = MaterialTheme.typography.bodyMedium
         )
+        
+        // Show individual file progress if available
+        if (progress.currentFileProgress > 0f && progress.currentFileName != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                progress.currentFileName!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            LinearProgressIndicator(
+                progress = { progress.currentFileProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
+            )
+            
+            Text(
+                "${(progress.currentFileProgress * 100).toInt()}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
         
         if (progress.hasErrors) {
             Spacer(modifier = Modifier.height(16.dp))

@@ -546,6 +546,20 @@ fun RomMApp(viewModel: MainViewModel) {
                     onDismiss = viewModel::clearSuccessMessage
                 )
             }
+            
+            // Show sync progress
+            val syncProgress = uiState.syncProgress
+            if (syncProgress != null && !syncProgress.isComplete) {
+                val progressMessage = if (syncProgress.currentFileName != null && syncProgress.currentFileProgress > 0f) {
+                    "(${syncProgress.itemsProcessed + 1} / ${syncProgress.totalItems}) Uploading ${syncProgress.currentFileName} (${(syncProgress.currentFileProgress * 100).toInt()}%)"
+                } else {
+                    "(${syncProgress.itemsProcessed} / ${syncProgress.totalItems}) ${syncProgress.currentStep}"
+                }
+                ProgressSnackbar(
+                    message = progressMessage,
+                    progress = syncProgress.overallProgressPercent / 100f
+                )
+            }
         }
         
         // Sync Dialog
@@ -684,7 +698,8 @@ data class UiState(
     val settings: AppSettings = AppSettings(),
     val searchQuery: String = "", // Search query for game list
     val isSearchActive: Boolean = false, // Whether search mode is active
-    val showSyncDialog: Boolean = false // Whether sync dialog is shown
+    val showSyncDialog: Boolean = false, // Whether sync dialog is shown
+    val syncProgress: com.romm.android.sync.SyncProgress? = null // Current sync progress
 )
 
 sealed class Screen {
@@ -813,10 +828,14 @@ class MainViewModel @Inject constructor(
                     syncRequest = syncRequest,
                     settings = settings,
                     onProgress = { progress ->
-                        // Optional: Show progress in main UI
+                        // Show progress in main UI
+                        _uiState.value = _uiState.value.copy(syncProgress = progress)
                         Log.d("MainViewModel", "Sync progress: ${progress.currentStep}")
                     },
                     onComplete = { result ->
+                        // Clear progress and show result
+                        _uiState.value = _uiState.value.copy(syncProgress = null)
+                        
                         if (result.success) {
                             _uiState.value = _uiState.value.copy(
                                 successMessage = "Sync completed: ↑${result.uploadedCount} ↓${result.downloadedCount} ⏸${result.skippedCount}"
@@ -830,6 +849,7 @@ class MainViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
+                    syncProgress = null,
                     error = "Failed to start sync: ${e.message}"
                 )
             }

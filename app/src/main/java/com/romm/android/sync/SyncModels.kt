@@ -82,9 +82,17 @@ data class SyncProgress(
     val totalBytes: Long,
     val isComplete: Boolean,
     val hasErrors: Boolean,
-    val errors: List<String> = emptyList()
+    val errors: List<String> = emptyList(),
+    val currentFileProgress: Float = 0f, // Progress for current file upload (0.0 to 1.0)
+    val currentFileName: String? = null
 ) {
     val progressPercent: Float get() = if (totalItems > 0) (itemsProcessed.toFloat() / totalItems) * 100f else 0f
+    val overallProgressPercent: Float get() {
+        if (totalItems == 0) return 0f
+        val itemProgress = itemsProcessed.toFloat() / totalItems
+        val currentItemProgress = if (currentFileProgress > 0f) currentFileProgress / totalItems else 0f
+        return (itemProgress + currentItemProgress) * 100f
+    }
 }
 
 data class SyncResult(
