@@ -352,17 +352,29 @@ class SyncManager @Inject constructor(
     ): List<SyncComparison> {
         val comparisons = mutableListOf<SyncComparison>()
         
-        // Create a map for quick lookup
-        val remoteByIdentifier = remoteItems.associateBy { "${it.platform}/${it.fileName}" }
-        val localByIdentifier = localItems.associateBy { "${it.platform}/${it.fileName}" }
+        // Create smart mapping that handles timestamped filenames
+        val remoteBySmartIdentifier = mutableMapOf<String, RemoteSyncItem>()
+        val localBySmartIdentifier = mutableMapOf<String, LocalSyncItem>()
         
-        // Find matches and conflicts
-        val allIdentifiers = (localItems.map { "${it.platform}/${it.fileName}" } + 
-                             remoteItems.map { "${it.platform}/${it.fileName}" }).distinct()
+        // Map remote items by base filename (without timestamp)
+        for (remoteItem in remoteItems) {
+            val baseFileName = extractBaseFileName(remoteItem.fileName)
+            val smartIdentifier = "${remoteItem.platform}/${baseFileName}"
+            remoteBySmartIdentifier[smartIdentifier] = remoteItem
+        }
         
-        for (identifier in allIdentifiers) {
-            val localItem = localByIdentifier[identifier]
-            val remoteItem = remoteByIdentifier[identifier]
+        // Map local items by filename
+        for (localItem in localItems) {
+            val smartIdentifier = "${localItem.platform}/${localItem.fileName}"
+            localBySmartIdentifier[smartIdentifier] = localItem
+        }
+        
+        // Find matches and conflicts using smart identifiers
+        val allSmartIdentifiers = (localBySmartIdentifier.keys + remoteBySmartIdentifier.keys).distinct()
+        
+        for (identifier in allSmartIdentifiers) {
+            val localItem = localBySmartIdentifier[identifier]
+            val remoteItem = remoteBySmartIdentifier[identifier]
             
             val comparison = when {
                 localItem != null && remoteItem != null -> {
@@ -396,50 +408,130 @@ class SyncManager @Inject constructor(
         return comparisons
     }
     
+    private fun extractBaseFileName(fileName: String): String {
+        // Extract base filename from timestamped format: "basename [YYYY-MM-DD HH-mm-ss-SSS].ext"
+        // Pattern matches: anything followed by " [timestamp]" followed by optional extension
+        val timestampPattern = Regex("""\s\[\d{4}-\d{2}-\d{2}\s\d{2}-\d{2}-\d{2}-\d{3}\]""")
+        return fileName.replace(timestampPattern, "")
+    }
+    
+    private fun extractTimestampFromFileName(fileName: String): LocalDateTime? {
+        // Extract timestamp from format: "basename [YYYY-MM-DD HH-mm-ss-SSS].ext"
+        val timestampPattern = Regex("""\[(\d{4}-\d{2}-\d{2}\s\d{2}-\d{2}-\d{2}-\d{3})\]""")
+        val matchResult = timestampPattern.find(fileName)
+        
+        return matchResult?.let { match ->
+            try {
+                val timestampStr = match.groupValues[1]
+                LocalDateTime.parse(
+                    timestampStr, 
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS")
+                )
+            } catch (e: DateTimeParseException) {
+                Log.w("SyncManager", "Failed to parse timestamp from filename: $fileName", e)
+                null
+            }
+        }
+    }
+    
     private fun compareItems(
         localItem: LocalSyncItem,
         remoteItem: RemoteSyncItem,
         direction: SyncDirection
     ): SyncComparison {
         val localTime = localItem.lastModified
-        val remoteTime = remoteItem.lastModified
+        // Extract timestamp from remote filename instead of using server metadata timestamp
+        val remoteTimeFromFilename = extractTimestampFromFileName(remoteItem.fileName)
         val localSize = localItem.sizeBytes
         val remoteSize = remoteItem.sizeBytes
         
+        Log.d("SyncManager", "Comparing files:")
+        Log.d("SyncManager", "  Local: ${localItem.fileName} (${localTime})")
+        Log.d("SyncManager", "  Remote: ${remoteItem.fileName} (extracted: ${remoteTimeFromFilename})")
+        
         return when {
-            // Files are identical (same size and timestamp within 1 second tolerance)
-            localSize == remoteSize && Math.abs(java.time.Duration.between(localTime, remoteTime).seconds) <= 1 -> {
-                SyncComparison(localItem, remoteItem, SyncAction.SKIP_IDENTICAL, "Files are identical")
-            }
-            
-            // Local file is newer
-            localTime.isAfter(remoteTime) -> {
-                when (direction) {
-                    SyncDirection.UPLOAD_ONLY, SyncDirection.BIDIRECTIONAL ->
-                        SyncComparison(localItem, remoteItem, SyncAction.UPLOAD, "Local file is newer")
-                    SyncDirection.DOWNLOAD_ONLY ->
-                        SyncComparison(localItem, remoteItem, SyncAction.SKIP_CONFLICT, "Local file newer but download-only mode")
+            // If we can extract timestamp from filename, compare with local file timestamp
+            remoteTimeFromFilename != null -> {
+                val timeDifferenceSeconds = Math.abs(java.time.Duration.between(localTime, remoteTimeFromFilename).seconds)
+                Log.d("SyncManager", "  Time difference: ${timeDifferenceSeconds}s")
+                
+                when {
+                    // Files are identical (same size and timestamp within 1 second tolerance)
+                    localSize == remoteSize && timeDifferenceSeconds <= 1 -> {
+                        SyncComparison(localItem, remoteItem, SyncAction.SKIP_IDENTICAL, "Files are identical (timestamp match)")
+                    }
+                    
+                    // Local file is newer
+                    localTime.isAfter(remoteTimeFromFilename) -> {
+                        when (direction) {
+                            SyncDirection.UPLOAD_ONLY, SyncDirection.BIDIRECTIONAL ->
+                                SyncComparison(localItem, remoteItem, SyncAction.UPLOAD, "Local file is newer")
+                            SyncDirection.DOWNLOAD_ONLY ->
+                                SyncComparison(localItem, remoteItem, SyncAction.SKIP_CONFLICT, "Local file newer but download-only mode")
+                        }
+                    }
+                    
+                    // Remote file is newer
+                    remoteTimeFromFilename.isAfter(localTime) -> {
+                        when (direction) {
+                            SyncDirection.DOWNLOAD_ONLY, SyncDirection.BIDIRECTIONAL ->
+                                SyncComparison(localItem, remoteItem, SyncAction.DOWNLOAD, "Remote file is newer")
+                            SyncDirection.UPLOAD_ONLY ->
+                                SyncComparison(localItem, remoteItem, SyncAction.SKIP_CONFLICT, "Remote file newer but upload-only mode")
+                        }
+                    }
+                    
+                    // Same timestamp but different size - conflict
+                    else -> {
+                        SyncComparison(
+                            localItem, 
+                            remoteItem, 
+                            SyncAction.SKIP_CONFLICT, 
+                            "Files have same timestamp but different sizes (${localSize} vs ${remoteSize} bytes)"
+                        )
+                    }
                 }
             }
             
-            // Remote file is newer
-            remoteTime.isAfter(localTime) -> {
-                when (direction) {
-                    SyncDirection.DOWNLOAD_ONLY, SyncDirection.BIDIRECTIONAL ->
-                        SyncComparison(localItem, remoteItem, SyncAction.DOWNLOAD, "Remote file is newer")
-                    SyncDirection.UPLOAD_ONLY ->
-                        SyncComparison(localItem, remoteItem, SyncAction.SKIP_CONFLICT, "Remote file newer but upload-only mode")
-                }
-            }
-            
-            // Same timestamp but different size - conflict
+            // Fallback: If we can't extract timestamp from filename, use server metadata timestamp
             else -> {
-                SyncComparison(
-                    localItem, 
-                    remoteItem, 
-                    SyncAction.SKIP_CONFLICT, 
-                    "Files have same timestamp but different sizes (${localSize} vs ${remoteSize} bytes)"
-                )
+                val remoteTime = remoteItem.lastModified
+                when {
+                    // Files are identical (same size and timestamp within 1 second tolerance)
+                    localSize == remoteSize && Math.abs(java.time.Duration.between(localTime, remoteTime).seconds) <= 1 -> {
+                        SyncComparison(localItem, remoteItem, SyncAction.SKIP_IDENTICAL, "Files are identical")
+                    }
+                    
+                    // Local file is newer
+                    localTime.isAfter(remoteTime) -> {
+                        when (direction) {
+                            SyncDirection.UPLOAD_ONLY, SyncDirection.BIDIRECTIONAL ->
+                                SyncComparison(localItem, remoteItem, SyncAction.UPLOAD, "Local file is newer")
+                            SyncDirection.DOWNLOAD_ONLY ->
+                                SyncComparison(localItem, remoteItem, SyncAction.SKIP_CONFLICT, "Local file newer but download-only mode")
+                        }
+                    }
+                    
+                    // Remote file is newer
+                    remoteTime.isAfter(localTime) -> {
+                        when (direction) {
+                            SyncDirection.DOWNLOAD_ONLY, SyncDirection.BIDIRECTIONAL ->
+                                SyncComparison(localItem, remoteItem, SyncAction.DOWNLOAD, "Remote file is newer")
+                            SyncDirection.UPLOAD_ONLY ->
+                                SyncComparison(localItem, remoteItem, SyncAction.SKIP_CONFLICT, "Remote file newer but upload-only mode")
+                        }
+                    }
+                    
+                    // Same timestamp but different size - conflict
+                    else -> {
+                        SyncComparison(
+                            localItem, 
+                            remoteItem, 
+                            SyncAction.SKIP_CONFLICT, 
+                            "Files have same timestamp but different sizes (${localSize} vs ${remoteSize} bytes)"
+                        )
+                    }
+                }
             }
         }
     }
