@@ -225,11 +225,19 @@ class SyncManager @Inject constructor(
                     for ((index, save) in saves.withIndex()) {
                         Log.d("SyncManager", "Processing save file ${index + 1}/${saves.size}: ${save.file_name} (ROM ID: ${save.rom_id})")
                         
-                        // Apply emulator filter if specified
-                        if (syncRequest.emulatorFilter != null && 
-                            save.emulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true) {
-                            Log.d("SyncManager", "  -> Skipped due to emulator filter")
+                        // Only include saves from android-sync emulators
+                        if (save.emulator?.contains("android-sync-", ignoreCase = true) != true) {
+                            Log.d("SyncManager", "  -> Skipped: not an android-sync save (emulator: ${save.emulator})")
                             continue
+                        }
+                        
+                        // Apply emulator filter if specified (check against stripped name)
+                        if (syncRequest.emulatorFilter != null) {
+                            val strippedEmulator = save.emulator?.removePrefix("android-sync-")
+                            if (strippedEmulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true) {
+                                Log.d("SyncManager", "  -> Skipped due to emulator filter")
+                                continue
+                            }
                         }
                         
                         // Get game details to find platform and game name
@@ -247,7 +255,7 @@ class SyncManager @Inject constructor(
                                 saveFile = save,
                                 type = SyncItemType.SAVE_FILE,
                                 platform = game.platform_slug,
-                                emulator = save.emulator,
+                                emulator = save.emulator?.removePrefix("android-sync-"), // Strip prefix for directory name
                                 gameName = game.name ?: game.fs_name_no_ext,
                                 fileName = save.file_name,
                                 lastModified = parseDateTime(save.updated_at ?: save.created_at),
@@ -277,11 +285,19 @@ class SyncManager @Inject constructor(
                     for ((index, state) in states.withIndex()) {
                         Log.d("SyncManager", "Processing save state ${index + 1}/${states.size}: ${state.file_name} (ROM ID: ${state.rom_id})")
                         
-                        // Apply emulator filter if specified
-                        if (syncRequest.emulatorFilter != null && 
-                            state.emulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true) {
-                            Log.d("SyncManager", "  -> Skipped due to emulator filter")
+                        // Only include states from android-sync emulators
+                        if (state.emulator?.contains("android-sync-", ignoreCase = true) != true) {
+                            Log.d("SyncManager", "  -> Skipped: not an android-sync save state (emulator: ${state.emulator})")
                             continue
+                        }
+                        
+                        // Apply emulator filter if specified (check against stripped name)
+                        if (syncRequest.emulatorFilter != null) {
+                            val strippedEmulator = state.emulator?.removePrefix("android-sync-")
+                            if (strippedEmulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true) {
+                                Log.d("SyncManager", "  -> Skipped due to emulator filter")
+                                continue
+                            }
                         }
                         
                         // Get game details to find platform and game name
@@ -299,7 +315,7 @@ class SyncManager @Inject constructor(
                                 saveState = state,
                                 type = SyncItemType.SAVE_STATE,
                                 platform = game.platform_slug,
-                                emulator = state.emulator,
+                                emulator = state.emulator?.removePrefix("android-sync-"), // Strip prefix for directory name
                                 gameName = game.name ?: game.fs_name_no_ext,
                                 fileName = state.file_name,
                                 lastModified = parseDateTime(state.updated_at ?: state.created_at),

@@ -717,8 +717,13 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         }
         
         response.body()?.let { body ->
+            // Strip timestamp from filename before saving locally
+            val localFileName = stripTimestampFromFilename(fileName)
+            Log.d("UnifiedDownloadWorker", "Original filename: $fileName")
+            Log.d("UnifiedDownloadWorker", "Local filename: $localFileName")
+            
             // Create/overwrite the file
-            val outputFile = createOrReplaceFile(emulatorDir, fileName)
+            val outputFile = createOrReplaceFile(emulatorDir, localFileName)
             if (outputFile == null) {
                 Log.e("UnifiedDownloadWorker", "Could not create save file output: $fileName")
                 return Result.failure()
@@ -788,8 +793,13 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         }
         
         response.body()?.let { body ->
+            // Strip timestamp from filename before saving locally
+            val localFileName = stripTimestampFromFilename(fileName)
+            Log.d("UnifiedDownloadWorker", "Original filename: $fileName")
+            Log.d("UnifiedDownloadWorker", "Local filename: $localFileName")
+            
             // Create/overwrite the file
-            val outputFile = createOrReplaceFile(emulatorDir, fileName)
+            val outputFile = createOrReplaceFile(emulatorDir, localFileName)
             if (outputFile == null) {
                 Log.e("UnifiedDownloadWorker", "Could not create save state output: $fileName")
                 return Result.failure()
@@ -836,5 +846,16 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         
         Log.e("UnifiedDownloadWorker", "Failed to create or find directory: $dirName")
         return null
+    }
+    
+    /**
+     * Strip timestamp from filename to get original game filename
+     * Converts: "Metroid - Zero Mission (Europe) (En,Fr,De,Es,It) [2025-09-05 23-17-09-884].srm"
+     * To: "Metroid - Zero Mission (Europe) (En,Fr,De,Es,It).srm"
+     */
+    private fun stripTimestampFromFilename(fileName: String): String {
+        // Pattern matches: anything followed by " [YYYY-MM-DD HH-mm-ss-SSS]" followed by optional extension
+        val timestampPattern = Regex("""\s\[\d{4}-\d{2}-\d{2}\s\d{2}-\d{2}-\d{2}-\d{3}\]""")
+        return fileName.replace(timestampPattern, "")
     }
 }

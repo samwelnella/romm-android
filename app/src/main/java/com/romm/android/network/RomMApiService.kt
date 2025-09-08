@@ -469,12 +469,16 @@ class RomMApiService @Inject constructor(
         android.util.Log.d("RomMApiService", "  - Content type: application/octet-stream")
         android.util.Log.d("RomMApiService", "  - Content length: ${bytes.size} bytes")
         
+        // Prepend "android-sync-" to emulator name for identification
+        val androidSyncEmulator = if (emulator != null) "android-sync-$emulator" else "android-sync"
+        
         // Check API endpoint parameters
         android.util.Log.d("RomMApiService", "API call parameters:")
         android.util.Log.d("RomMApiService", "  - rom_id: $romId")
-        android.util.Log.d("RomMApiService", "  - emulator: $emulator")
+        android.util.Log.d("RomMApiService", "  - original emulator: $emulator")
+        android.util.Log.d("RomMApiService", "  - android-sync emulator: $androidSyncEmulator")
         
-        return getApi().uploadSaveFile(romId, emulator, multipartBody)
+        return getApi().uploadSaveFile(romId, androidSyncEmulator, multipartBody)
     }
     
     suspend fun uploadSaveState(
@@ -516,7 +520,14 @@ class RomMApiService @Inject constructor(
             body = requestBody
         )
         
-        return getApi().uploadSaveState(romId, emulator, multipartBody)
+        // Prepend "android-sync-" to emulator name for identification
+        val androidSyncEmulator = if (emulator != null) "android-sync-$emulator" else "android-sync"
+        
+        android.util.Log.d("RomMApiService", "Save state upload:")
+        android.util.Log.d("RomMApiService", "  - original emulator: $emulator")
+        android.util.Log.d("RomMApiService", "  - android-sync emulator: $androidSyncEmulator")
+        
+        return getApi().uploadSaveState(romId, androidSyncEmulator, multipartBody)
     }
     
     suspend fun updateSaveFile(
