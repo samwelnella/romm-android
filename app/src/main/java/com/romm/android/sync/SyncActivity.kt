@@ -254,16 +254,21 @@ fun SyncScreen(
         }
     }
     
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         Text(
             text = if (uiState.isDryRun) "Sync Plan" else "Save Data Sync",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -287,7 +292,8 @@ fun SyncScreen(
                     SyncDirection.DOWNLOAD_ONLY -> "Download Only" 
                     SyncDirection.BIDIRECTIONAL -> "Two-Way Sync"
                 },
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
         
@@ -331,7 +337,8 @@ fun SyncScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     uiState.currentStep,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
             
@@ -352,6 +359,7 @@ fun SyncScreen(
                 val result = uiState.syncResult!!
                 SyncResultDisplay(result = result)
             }
+        }
         }
     }
 }
@@ -434,7 +442,7 @@ fun SyncComparisonItem(comparison: SyncComparison) {
             tint = when (comparison.recommendedAction) {
                 SyncAction.UPLOAD -> MaterialTheme.colorScheme.primary
                 SyncAction.DOWNLOAD -> MaterialTheme.colorScheme.secondary
-                else -> MaterialTheme.colorScheme.outline
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
             }
         )
         
@@ -448,7 +456,7 @@ fun SyncComparisonItem(comparison: SyncComparison) {
             Text(
                 comparison.reason,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -468,12 +476,14 @@ fun SyncProgressDisplay(progress: SyncProgress) {
         
         Text(
             progress.currentStep,
-            style = MaterialTheme.typography.titleMedium
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
         )
         
         Text(
             "${progress.itemsProcessed} of ${progress.totalItems}",
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground
         )
         
         // Show individual file progress if available
@@ -483,7 +493,7 @@ fun SyncProgressDisplay(progress: SyncProgress) {
             Text(
                 progress.currentFileName!!,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             
             Spacer(modifier = Modifier.height(4.dp))
@@ -498,7 +508,7 @@ fun SyncProgressDisplay(progress: SyncProgress) {
             Text(
                 "${(progress.currentFileProgress * 100).toInt()}%",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         
