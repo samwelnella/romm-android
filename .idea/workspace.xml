@@ -17,12 +17,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="890472c5-fe03-43ca-a235-83992f5098d1" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/CollectionListScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/CollectionListScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/GameListScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/GameListScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/PlatformListScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/PlatformListScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/SaveFilesScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/SaveFilesScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/SaveStatesScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/romm/android/ui/screens/SaveStatesScreen.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/romm/android/sync/FileScanner.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/romm/android/sync/FileScanner.kt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

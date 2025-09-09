@@ -87,7 +87,7 @@ class FileScanner @Inject constructor(
                 type = type,
                 items = items,
                 basePath = "",
-                maxDepth = 5 // Prevent infinite recursion
+                maxDepth = 2 // Only scan [platform]/[emulator]/ - ignore deeper subdirectories
             )
             
         } catch (e: Exception) {
@@ -130,27 +130,23 @@ class FileScanner @Inject constructor(
                         
                         Log.d("FileScanner", "Syncable file: $fileName -> Platform: ${metadata.platform}, Emulator: ${metadata.emulator}")
                         
-                        // Only sync files from known/whitelisted emulators
-                        if (EmulatorMapper.isKnownEmulator(metadata.emulator)) {
-                            items.add(
-                                LocalSyncItem(
-                                    file = File(file.uri.path ?: ""), // This might not be a real path
-                                    type = type,
-                                    platform = metadata.platform,
-                                    emulator = metadata.emulator,
-                                    gameName = metadata.gameName,
-                                    fileName = fileName,
-                                    lastModified = LocalDateTime.ofInstant(
-                                        Instant.ofEpochMilli(file.lastModified()),
-                                        ZoneId.systemDefault()
-                                    ),
-                                    sizeBytes = fileSize,
-                                    relativePathFromBaseDir = if (basePath.isEmpty()) fileName else "$basePath/$fileName"
-                                )
+                        // Add all files with valid extensions - no emulator whitelist needed
+                        items.add(
+                            LocalSyncItem(
+                                file = File(file.uri.path ?: ""), // This might not be a real path
+                                type = type,
+                                platform = metadata.platform,
+                                emulator = metadata.emulator,
+                                gameName = metadata.gameName,
+                                fileName = fileName,
+                                lastModified = LocalDateTime.ofInstant(
+                                    Instant.ofEpochMilli(file.lastModified()),
+                                    ZoneId.systemDefault()
+                                ),
+                                sizeBytes = fileSize,
+                                relativePathFromBaseDir = if (basePath.isEmpty()) fileName else "$basePath/$fileName"
                             )
-                        } else {
-                            Log.d("FileScanner", "  -> Skipped: emulator '${metadata.emulator}' is not whitelisted for sync")
-                        }
+                        )
                     } else {
                         Log.d("FileScanner", "File '$fileName' is not syncable for type $type")
                     }
