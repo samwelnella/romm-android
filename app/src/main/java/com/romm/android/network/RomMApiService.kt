@@ -120,10 +120,24 @@ interface RomMApi {
         @Body file: RequestBody
     ): SaveFile
     
+    @Multipart
+    @PUT("api/saves/{id}")
+    suspend fun updateSaveFileMultipart(
+        @Path("id") id: Int,
+        @Part saveFile: MultipartBody.Part
+    ): SaveFile
+    
     @PUT("api/states/{id}")
     suspend fun updateSaveState(
         @Path("id") id: Int,
         @Body file: RequestBody
+    ): SaveState
+    
+    @Multipart
+    @PUT("api/states/{id}")
+    suspend fun updateSaveStateMultipart(
+        @Path("id") id: Int,
+        @Part stateFile: MultipartBody.Part
     ): SaveState
     
 }
@@ -527,23 +541,49 @@ class RomMApiService @Inject constructor(
     ): SaveFile {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        // Use ParcelFileDescriptor approach for consistency
-        val bytes = try {
-            val pfd = applicationContext.contentResolver.openFileDescriptor(documentFile.uri, "r")
-                ?: throw IllegalArgumentException("Cannot open file descriptor")
+        android.util.Log.d("RomMApiService", "Updating save file: $fileName (${documentFile.length()} bytes)")
+        
+        // Create streaming request body
+        val requestBody = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
             
-            pfd.use { fileDescriptor ->
-                val fileInputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
-                fileInputStream.use { it.readBytes() }
+            override fun contentLength() = documentFile.length()
+            
+            override fun writeTo(sink: okio.BufferedSink) {
+                applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
+                    val totalBytes = contentLength()
+                    var bytesWritten = 0L
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        sink.write(buffer, 0, bytesRead)
+                        bytesWritten += bytesRead
+                    }
+                } ?: throw IllegalArgumentException("Could not open input stream")
             }
-        } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Failed to read save file for update: ${e.message}")
-            throw IllegalArgumentException("Failed to read save file for update: ${e.message}")
         }
         
-        val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
+        // Create filename with android-sync- prefix and timestamp (same as upload)
+        val baseNameWithoutExt = fileName.substringBeforeLast(".")
+        val extension = fileName.substringAfterLast(".", "")
+        val lastModifiedTime = documentFile.lastModified()
+        val timestamp = java.time.LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(lastModifiedTime),
+            java.time.ZoneId.systemDefault()
+        ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
+        val timestampedFileName = "android-sync-$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
-        return getApi().updateSaveFile(saveFileId, requestBody)
+        // Use multipart format like upload, but for update endpoint
+        val multipartBody = MultipartBody.Part.createFormData(
+            name = "saveFile",
+            filename = timestampedFileName,
+            body = requestBody
+        )
+        
+        android.util.Log.d("RomMApiService", "Update save file with multipart body: $timestampedFileName")
+        
+        return getApi().updateSaveFileMultipart(saveFileId, multipartBody)
     }
     
     suspend fun updateSaveState(
@@ -552,23 +592,49 @@ class RomMApiService @Inject constructor(
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        // Use ParcelFileDescriptor approach for consistency
-        val bytes = try {
-            val pfd = applicationContext.contentResolver.openFileDescriptor(documentFile.uri, "r")
-                ?: throw IllegalArgumentException("Cannot open file descriptor")
+        android.util.Log.d("RomMApiService", "Updating save state: $fileName (${documentFile.length()} bytes)")
+        
+        // Create streaming request body
+        val requestBody = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
             
-            pfd.use { fileDescriptor ->
-                val fileInputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
-                fileInputStream.use { it.readBytes() }
+            override fun contentLength() = documentFile.length()
+            
+            override fun writeTo(sink: okio.BufferedSink) {
+                applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
+                    val totalBytes = contentLength()
+                    var bytesWritten = 0L
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        sink.write(buffer, 0, bytesRead)
+                        bytesWritten += bytesRead
+                    }
+                } ?: throw IllegalArgumentException("Could not open input stream")
             }
-        } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Failed to read save state for update: ${e.message}")
-            throw IllegalArgumentException("Failed to read save state for update: ${e.message}")
         }
         
-        val requestBody = bytes.toRequestBody("application/octet-stream".toMediaType())
+        // Create filename with android-sync- prefix and timestamp (same as upload)
+        val baseNameWithoutExt = fileName.substringBeforeLast(".")
+        val extension = fileName.substringAfterLast(".", "")
+        val lastModifiedTime = documentFile.lastModified()
+        val timestamp = java.time.LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(lastModifiedTime),
+            java.time.ZoneId.systemDefault()
+        ).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
+        val timestampedFileName = "android-sync-$baseNameWithoutExt [$timestamp]${if (extension.isNotEmpty()) ".$extension" else ""}"
         
-        return getApi().updateSaveState(saveStateId, requestBody)
+        // Use multipart format like upload, but for update endpoint
+        val multipartBody = MultipartBody.Part.createFormData(
+            name = "stateFile",
+            filename = timestampedFileName,
+            body = requestBody
+        )
+        
+        android.util.Log.d("RomMApiService", "Update save state with multipart body: $timestampedFileName")
+        
+        return getApi().updateSaveStateMultipart(saveStateId, multipartBody)
     }
     
     private fun encodeDownloadPath(rawPath: String): String {

@@ -381,12 +381,12 @@ class SyncManager @Inject constructor(
         }
         
         return try {
-            // Try various date formats that RomM might use
+            // Simple parsing for ISO format timestamps - only used as fallback
             when {
-                dateString.contains('T') -> LocalDateTime.parse(dateString.substringBefore('.'))
+                dateString.contains('T') -> LocalDateTime.parse(dateString.substringBefore('.').substringBefore('+'))
                 else -> LocalDateTime.now() // Fallback
             }
-        } catch (e: DateTimeParseException) {
+        } catch (e: Exception) {
             Log.w("SyncManager", "Could not parse date: $dateString", e)
             LocalDateTime.now()
         }
@@ -403,11 +403,32 @@ class SyncManager @Inject constructor(
         val remoteBySmartIdentifier = mutableMapOf<String, RemoteSyncItem>()
         val localBySmartIdentifier = mutableMapOf<String, LocalSyncItem>()
         
-        // Map remote items by base filename (without timestamp)
+        // Map remote items by base filename, keeping only the most recent version of each file
         for (remoteItem in remoteItems) {
             val baseFileName = extractBaseFileName(remoteItem.fileName)
             val smartIdentifier = "${remoteItem.platform}/${baseFileName}"
-            remoteBySmartIdentifier[smartIdentifier] = remoteItem
+            
+            val existingItem = remoteBySmartIdentifier[smartIdentifier]
+            if (existingItem == null) {
+                // No existing version, add this one
+                remoteBySmartIdentifier[smartIdentifier] = remoteItem
+            } else {
+                // Compare timestamps to keep the most recent version
+                val currentTimestamp = extractTimestampFromFileName(remoteItem.fileName)
+                val existingTimestamp = extractTimestampFromFileName(existingItem.fileName)
+                
+                if (currentTimestamp != null && existingTimestamp != null) {
+                    if (currentTimestamp.isAfter(existingTimestamp)) {
+                        // Current item is newer, replace existing
+                        remoteBySmartIdentifier[smartIdentifier] = remoteItem
+                        Log.d("SyncManager", "Found newer version: ${remoteItem.fileName} > ${existingItem.fileName}")
+                    }
+                } else if (currentTimestamp != null && existingTimestamp == null) {
+                    // Current has timestamp, existing doesn't - prefer timestamped version
+                    remoteBySmartIdentifier[smartIdentifier] = remoteItem
+                }
+                // If neither has timestamp or existing is newer, keep existing (no action needed)
+            }
         }
         
         // Map local items by filename
@@ -470,7 +491,7 @@ class SyncManager @Inject constructor(
     }
     
     private fun extractTimestampFromFileName(fileName: String): LocalDateTime? {
-        // Extract timestamp from format: "basename [YYYY-MM-DD HH-mm-ss-SSS].ext"
+        // Extract timestamp from format: "android-sync-basename [YYYY-MM-DD HH-mm-ss-SSS].ext"
         val timestampPattern = Regex("""\[(\d{4}-\d{2}-\d{2}\s\d{2}-\d{2}-\d{2}-\d{3})\]""")
         val matchResult = timestampPattern.find(fileName)
         
@@ -481,7 +502,7 @@ class SyncManager @Inject constructor(
                     timestampStr, 
                     java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS")
                 )
-            } catch (e: DateTimeParseException) {
+            } catch (e: Exception) {
                 Log.w("SyncManager", "Failed to parse timestamp from filename: $fileName", e)
                 null
             }
@@ -629,22 +650,14 @@ class SyncManager @Inject constructor(
             
             when (localItem.type) {
                 SyncItemType.SAVE_FILE -> {
-                    if (remoteItem != null) {
-                        // Update existing
-                        apiService.updateSaveFile(remoteItem.id, documentFile)
-                    } else {
-                        // Create new
-                        apiService.uploadSaveFile(romId, localItem.emulator, documentFile, onProgress)
-                    }
+                    // Always create new file with fresh timestamp instead of updating
+                    Log.d("SyncManager", if (remoteItem != null) "Creating new version of save file (instead of updating)" else "Creating new save file")
+                    apiService.uploadSaveFile(romId, localItem.emulator, documentFile, onProgress)
                 }
                 SyncItemType.SAVE_STATE -> {
-                    if (remoteItem != null) {
-                        // Update existing
-                        apiService.updateSaveState(remoteItem.id, documentFile)
-                    } else {
-                        // Create new
-                        apiService.uploadSaveState(romId, localItem.emulator, documentFile, onProgress)
-                    }
+                    // Always create new file with fresh timestamp instead of updating
+                    Log.d("SyncManager", if (remoteItem != null) "Creating new version of save state (instead of updating)" else "Creating new save state")
+                    apiService.uploadSaveState(romId, localItem.emulator, documentFile, onProgress)
                 }
             }
             
