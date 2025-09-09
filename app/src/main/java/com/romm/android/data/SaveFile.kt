@@ -39,6 +39,7 @@ data class SaveState(
     val rom_id: Int,
     val user_id: Int,
     val missing_from_fs: Boolean? = null,
+    val screenshot: Screenshot? = null,
     val created_at: String,
     val updated_at: String
 )

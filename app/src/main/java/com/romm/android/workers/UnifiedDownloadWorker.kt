@@ -814,19 +814,18 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             
             // After successfully downloading the save state, check for and download associated screenshot
             try {
-                Log.d("UnifiedDownloadWorker", "Checking for associated screenshot for save state: $stateId")
-                val screenshots = apiService.getScreenshotsForSaveState(stateId)
+                Log.d("UnifiedDownloadWorker", "Checking for associated screenshot in save state data")
                 
-                if (screenshots.isNotEmpty()) {
-                    // Use the most recent screenshot (should typically be just one)
-                    val screenshot = screenshots.first()
-                    Log.d("UnifiedDownloadWorker", "Found screenshot: ${screenshot.file_name}")
+                // Check if save state has an associated screenshot directly in the response
+                if (saveState.screenshot != null) {
+                    val screenshot = saveState.screenshot!!
+                    Log.d("UnifiedDownloadWorker", "Found screenshot in save state: ${screenshot.file_name}")
                     
                     val screenshotResponse = apiService.downloadScreenshot(screenshot)
                     if (screenshotResponse.isSuccessful) {
                         screenshotResponse.body()?.let { screenshotBody ->
-                            // Create PNG filename matching the local save state file
-                            val screenshotFileName = "${localFileName.substringBeforeLast(".")}.png"
+                            // Create PNG filename matching the local save state file + .png
+                            val screenshotFileName = "$localFileName.png"
                             
                             val screenshotFile = createOrReplaceFile(emulatorDir, screenshotFileName)
                             if (screenshotFile != null) {
@@ -843,7 +842,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                         Log.w("UnifiedDownloadWorker", "Screenshot download failed with response code: ${screenshotResponse.code()}")
                     }
                 } else {
-                    Log.d("UnifiedDownloadWorker", "No screenshot found for save state: $stateId")
+                    Log.d("UnifiedDownloadWorker", "No screenshot associated with save state: $stateId")
                 }
             } catch (e: Exception) {
                 Log.w("UnifiedDownloadWorker", "Error downloading screenshot for save state $stateId", e)
