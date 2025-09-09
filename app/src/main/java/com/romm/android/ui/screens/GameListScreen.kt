@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,14 +86,21 @@ fun GameListScreen(
         indices
     }
     
+    val swipeRefreshState = rememberSwipeRefreshState(isLoading)
+    
     Box(modifier = Modifier.fillMaxSize()) {
-        // Game list - now takes full height since header is in TopBar
-        LazyColumn(
-            state = lazyListState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 48.dp, top = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
         ) {
+            // Game list - now takes full height since header is in TopBar
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 48.dp, top = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             
             if (isLoading) {
                 item {
@@ -165,6 +174,7 @@ fun GameListScreen(
                     onClick = { onGameClick(game) }
                 )
             }
+        }
         }
         
         // Alphabet scrubber positioned on the right side

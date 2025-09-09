@@ -76,7 +76,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     
     // Compose BOM - this ensures all compose libraries use compatible versions
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
@@ -104,6 +104,9 @@ dependencies {
     
     // Image Loading (for cover art)
     implementation("io.coil-kt:coil-compose:2.5.0")
+    
+    // Pull to refresh
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")
     
     // DocumentFile for SAF support
     implementation("androidx.documentfile:documentfile:1.0.1")

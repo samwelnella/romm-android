@@ -297,15 +297,6 @@ fun RomMApp(viewModel: MainViewModel) {
                     )
                 }
             }
-        },
-        floatingActionButton = {
-            if (uiState.currentScreen is Screen.PlatformList || uiState.currentScreen is Screen.CollectionList) {
-                FloatingActionButton(
-                    onClick = { viewModel.refreshData() }
-                ) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-                }
-            }
         }
     ) { paddingValues ->
         Box(

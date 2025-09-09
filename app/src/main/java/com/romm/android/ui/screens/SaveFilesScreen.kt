@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,12 +34,19 @@ fun SaveFilesScreen(
     onDownloadAllSaves: () -> Unit,
     lazyListState: LazyListState = rememberLazyListState()
 ) {
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val swipeRefreshState = rememberSwipeRefreshState(isLoading)
+    
+    SwipeRefresh(
+        state = swipeRefreshState,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
     ) {
+        LazyColumn(
+            state = lazyListState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         item {
             Card(
                 onClick = onDownloadAllSaves,
@@ -125,6 +134,7 @@ fun SaveFilesScreen(
                 onClick = { onPlatformClick(platformSaveFiles.platform) }
             )
         }
+        }
     }
 }
 
@@ -173,12 +183,19 @@ fun SaveFileDetailScreen(
     onRefresh: () -> Unit,
     lazyListState: LazyListState = rememberLazyListState()
 ) {
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val swipeRefreshState = rememberSwipeRefreshState(isLoading)
+    
+    SwipeRefresh(
+        state = swipeRefreshState,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
     ) {
+        LazyColumn(
+            state = lazyListState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         item {
             Card(
                 onClick = onDownloadPlatformSaves,
@@ -232,6 +249,7 @@ fun SaveFileDetailScreen(
                 gameWithSaves = gameWithSaves,
                 onClick = { onGameClick(gameWithSaves.game) }
             )
+        }
         }
     }
 }
@@ -303,7 +321,14 @@ fun GameSaveFileListScreen(
     onRefresh: () -> Unit,
     lazyListState: LazyListState = rememberLazyListState()
 ) {
-    LazyColumn(
+    val swipeRefreshState = rememberSwipeRefreshState(isLoading)
+    
+    SwipeRefresh(
+        state = swipeRefreshState,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        LazyColumn(
         state = lazyListState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -362,6 +387,7 @@ fun GameSaveFileListScreen(
                 saveFile = saveFile,
                 onClick = { onSaveFileClick(saveFile) }
             )
+        }
         }
     }
 }

@@ -9,6 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,12 +26,19 @@ fun CollectionListScreen(
     onRefresh: () -> Unit,
     lazyListState: LazyListState = rememberLazyListState()
 ) {
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val swipeRefreshState = rememberSwipeRefreshState(isLoading)
+    
+    SwipeRefresh(
+        state = swipeRefreshState,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
     ) {
+        LazyColumn(
+            state = lazyListState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         
         if (isLoading) {
             item {
@@ -47,6 +56,7 @@ fun CollectionListScreen(
                 collection = collection,
                 onClick = { onCollectionClick(collection) }
             )
+        }
         }
     }
 }
