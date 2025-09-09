@@ -25,6 +25,8 @@ class SettingsRepository @Inject constructor(
         val MAX_CONCURRENT_DOWNLOADS = intPreferencesKey("max_concurrent_downloads")
         val SAVE_FILES_DIRECTORY = stringPreferencesKey("save_files_directory")
         val SAVE_STATES_DIRECTORY = stringPreferencesKey("save_states_directory")
+        val SAVE_FILE_HISTORY_LIMIT = intPreferencesKey("save_file_history_limit")
+        val SAVE_STATE_HISTORY_LIMIT = intPreferencesKey("save_state_history_limit")
     }
     
     val settings: Flow<AppSettings> = context.dataStore.data
@@ -36,7 +38,9 @@ class SettingsRepository @Inject constructor(
                 downloadDirectory = preferences[PreferencesKeys.DOWNLOAD_DIRECTORY] ?: "",
                 maxConcurrentDownloads = preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] ?: 3,
                 saveFilesDirectory = preferences[PreferencesKeys.SAVE_FILES_DIRECTORY] ?: "",
-                saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: ""
+                saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: "",
+                saveFileHistoryLimit = preferences[PreferencesKeys.SAVE_FILE_HISTORY_LIMIT] ?: 0,
+                saveStateHistoryLimit = preferences[PreferencesKeys.SAVE_STATE_HISTORY_LIMIT] ?: 0
             )
         }
     
@@ -49,6 +53,8 @@ class SettingsRepository @Inject constructor(
             preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] = settings.maxConcurrentDownloads
             preferences[PreferencesKeys.SAVE_FILES_DIRECTORY] = settings.saveFilesDirectory
             preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] = settings.saveStatesDirectory
+            preferences[PreferencesKeys.SAVE_FILE_HISTORY_LIMIT] = settings.saveFileHistoryLimit
+            preferences[PreferencesKeys.SAVE_STATE_HISTORY_LIMIT] = settings.saveStateHistoryLimit
         }
     }
     
@@ -61,7 +67,9 @@ class SettingsRepository @Inject constructor(
             downloadDirectory = preferences[PreferencesKeys.DOWNLOAD_DIRECTORY] ?: "",
             maxConcurrentDownloads = preferences[PreferencesKeys.MAX_CONCURRENT_DOWNLOADS] ?: 3,
             saveFilesDirectory = preferences[PreferencesKeys.SAVE_FILES_DIRECTORY] ?: "",
-            saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: ""
+            saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: "",
+            saveFileHistoryLimit = preferences[PreferencesKeys.SAVE_FILE_HISTORY_LIMIT] ?: 0,
+            saveStateHistoryLimit = preferences[PreferencesKeys.SAVE_STATE_HISTORY_LIMIT] ?: 0
         )
     }
 }

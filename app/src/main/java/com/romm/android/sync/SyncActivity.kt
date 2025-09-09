@@ -155,14 +155,20 @@ class SyncViewModel @Inject constructor(
                     return@launch
                 }
                 
-                if (syncRequest.saveFilesEnabled && settings.saveFilesDirectory.isEmpty()) {
+                // Merge sync request with settings-based history limits
+                val updatedSyncRequest = syncRequest.copy(
+                    saveFileHistoryLimit = settings.saveFileHistoryLimit,
+                    saveStateHistoryLimit = settings.saveStateHistoryLimit
+                )
+                
+                if (updatedSyncRequest.saveFilesEnabled && settings.saveFilesDirectory.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         error = "Save files directory not configured. Please configure in main app settings."
                     )
                     return@launch
                 }
                 
-                if (syncRequest.saveStatesEnabled && settings.saveStatesDirectory.isEmpty()) {
+                if (updatedSyncRequest.saveStatesEnabled && settings.saveStatesDirectory.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         error = "Save states directory not configured. Please configure in main app settings."
                     )
@@ -175,9 +181,9 @@ class SyncViewModel @Inject constructor(
                     currentStep = "Preparing sync..."
                 )
                 
-                if (syncRequest.dryRun) {
+                if (updatedSyncRequest.dryRun) {
                     // Just create plan, don't execute
-                    val plan = syncManager.createSyncPlan(syncRequest, settings)
+                    val plan = syncManager.createSyncPlan(updatedSyncRequest, settings)
                     _uiState.value = _uiState.value.copy(
                         isScanning = false,
                         syncPlan = plan,
@@ -186,7 +192,7 @@ class SyncViewModel @Inject constructor(
                 } else {
                     // Execute full sync
                     syncManager.executeSync(
-                        syncRequest = syncRequest,
+                        syncRequest = updatedSyncRequest,
                         settings = settings,
                         onProgress = { progress ->
                             _uiState.value = _uiState.value.copy(

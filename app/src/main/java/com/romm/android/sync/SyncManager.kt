@@ -662,6 +662,17 @@ class SyncManager @Inject constructor(
             }
             
             Log.d("SyncManager", "Successfully uploaded ${localItem.fileName}")
+            
+            // Clean up old versions if history limit is set
+            val historyLimit = when (localItem.type) {
+                SyncItemType.SAVE_FILE -> settings.saveFileHistoryLimit
+                SyncItemType.SAVE_STATE -> settings.saveStateHistoryLimit
+            }
+            
+            if (historyLimit > 0) {
+                cleanupOldVersions(romId, localItem, historyLimit)
+            }
+            
             true
             
         } catch (e: retrofit2.HttpException) {
@@ -756,6 +767,89 @@ class SyncManager @Inject constructor(
         } catch (e: Exception) {
             Log.e("SyncManager", "Failed to download ${remoteItem.fileName}", e)
             false
+        }
+    }
+    
+    private suspend fun cleanupOldVersions(romId: Int, localItem: LocalSyncItem, historyLimit: Int) {
+        try {
+            val baseFileName = extractBaseFileName(localItem.fileName)
+            Log.d("SyncManager", "Cleaning up old versions for '$baseFileName', keeping $historyLimit most recent")
+            
+            // Get all files of this type for the ROM
+            val allItems = when (localItem.type) {
+                SyncItemType.SAVE_FILE -> {
+                    apiService.getSavesByRom(romId).filter { 
+                        it.file_name.startsWith("android-sync-") &&
+                        extractBaseFileName(it.file_name) == baseFileName
+                    }.map { saveFile ->
+                        RemoteSyncItem(
+                            saveFile = saveFile,
+                            saveState = null,
+                            type = SyncItemType.SAVE_FILE,
+                            platform = localItem.platform,
+                            emulator = localItem.emulator,
+                            gameName = localItem.gameName,
+                            fileName = saveFile.file_name,
+                            lastModified = extractTimestampFromFileName(saveFile.file_name) 
+                                ?: java.time.LocalDateTime.now(),
+                            sizeBytes = saveFile.file_size_bytes,
+                            romId = romId
+                        )
+                    }
+                }
+                SyncItemType.SAVE_STATE -> {
+                    apiService.getSaveStatesByRom(romId).filter { 
+                        it.file_name.startsWith("android-sync-") &&
+                        extractBaseFileName(it.file_name) == baseFileName
+                    }.map { saveState ->
+                        RemoteSyncItem(
+                            saveFile = null,
+                            saveState = saveState,
+                            type = SyncItemType.SAVE_STATE,
+                            platform = localItem.platform,
+                            emulator = localItem.emulator,
+                            gameName = localItem.gameName,
+                            fileName = saveState.file_name,
+                            lastModified = extractTimestampFromFileName(saveState.file_name) 
+                                ?: java.time.LocalDateTime.now(),
+                            sizeBytes = saveState.file_size_bytes,
+                            romId = romId
+                        )
+                    }
+                }
+            }
+            
+            if (allItems.size <= historyLimit) {
+                Log.d("SyncManager", "Only ${allItems.size} versions found, no cleanup needed")
+                return
+            }
+            
+            // Sort by timestamp descending (newest first)
+            val sortedItems = allItems.sortedByDescending { it.lastModified }
+            val itemsToDelete = sortedItems.drop(historyLimit)
+            
+            Log.d("SyncManager", "Found ${allItems.size} versions, deleting ${itemsToDelete.size} oldest ones")
+            
+            // Delete old versions
+            for (item in itemsToDelete) {
+                try {
+                    when (item.type) {
+                        SyncItemType.SAVE_FILE -> {
+                            apiService.deleteSave(item.id)
+                            Log.d("SyncManager", "Deleted old save file version: ${item.fileName}")
+                        }
+                        SyncItemType.SAVE_STATE -> {
+                            apiService.deleteSaveState(item.id)
+                            Log.d("SyncManager", "Deleted old save state version: ${item.fileName}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("SyncManager", "Failed to delete old version ${item.fileName}", e)
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.w("SyncManager", "Failed to cleanup old versions for ${localItem.fileName}", e)
         }
     }
 }

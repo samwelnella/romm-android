@@ -113,7 +113,9 @@ data class SyncRequest(
     val platformFilter: String? = null, // null means all platforms
     val emulatorFilter: String? = null, // null means all emulators
     val gameFilter: String? = null, // null means all games, otherwise filename without extension
-    val dryRun: Boolean = false // if true, only plan but don't execute
+    val dryRun: Boolean = false, // if true, only plan but don't execute
+    val saveFileHistoryLimit: Int = 0, // 0 = no limit, 1-10 = max versions to keep
+    val saveStateHistoryLimit: Int = 0 // 0 = no limit, 1-10 = max versions to keep
 )
 
 data class PlatformEmulatorMapping(

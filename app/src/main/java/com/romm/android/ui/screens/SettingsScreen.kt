@@ -346,6 +346,122 @@ fun SettingsScreen(
             }
         }
         
+        Card {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Sync History Settings",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Text(
+                    "Limit the number of android-sync- versions kept on the server. Set to 0 for unlimited history.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Save File History Limit
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Save File History:",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { 
+                                if (currentSettings.saveFileHistoryLimit > 0) {
+                                    currentSettings = currentSettings.copy(saveFileHistoryLimit = currentSettings.saveFileHistoryLimit - 1)
+                                }
+                            },
+                            enabled = currentSettings.saveFileHistoryLimit > 0,
+                            modifier = Modifier.widthIn(min = 40.dp)
+                        ) {
+                            Text("-")
+                        }
+                        
+                        Text(
+                            text = if (currentSettings.saveFileHistoryLimit == 0) "∞" else currentSettings.saveFileHistoryLimit.toString(),
+                            modifier = Modifier.widthIn(min = 24.dp),
+                            style = MaterialTheme.typography.headlineSmall,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        Button(
+                            onClick = { 
+                                if (currentSettings.saveFileHistoryLimit < 10) {
+                                    currentSettings = currentSettings.copy(saveFileHistoryLimit = currentSettings.saveFileHistoryLimit + 1)
+                                }
+                            },
+                            enabled = currentSettings.saveFileHistoryLimit < 10,
+                            modifier = Modifier.widthIn(min = 40.dp)
+                        ) {
+                            Text("+")
+                        }
+                    }
+                }
+                
+                // Save State History Limit
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Save State History:",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { 
+                                if (currentSettings.saveStateHistoryLimit > 0) {
+                                    currentSettings = currentSettings.copy(saveStateHistoryLimit = currentSettings.saveStateHistoryLimit - 1)
+                                }
+                            },
+                            enabled = currentSettings.saveStateHistoryLimit > 0,
+                            modifier = Modifier.widthIn(min = 40.dp)
+                        ) {
+                            Text("-")
+                        }
+                        
+                        Text(
+                            text = if (currentSettings.saveStateHistoryLimit == 0) "∞" else currentSettings.saveStateHistoryLimit.toString(),
+                            modifier = Modifier.widthIn(min = 24.dp),
+                            style = MaterialTheme.typography.headlineSmall,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        Button(
+                            onClick = { 
+                                if (currentSettings.saveStateHistoryLimit < 10) {
+                                    currentSettings = currentSettings.copy(saveStateHistoryLimit = currentSettings.saveStateHistoryLimit + 1)
+                                }
+                            },
+                            enabled = currentSettings.saveStateHistoryLimit < 10,
+                            modifier = Modifier.widthIn(min = 40.dp)
+                        ) {
+                            Text("+")
+                        }
+                    }
+                }
+            }
+        }
+        
         Button(
             onClick = { 
                 try {

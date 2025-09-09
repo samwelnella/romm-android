@@ -140,6 +140,12 @@ interface RomMApi {
         @Part stateFile: MultipartBody.Part
     ): SaveState
     
+    @DELETE("api/saves/{id}")
+    suspend fun deleteSave(@Path("id") id: Int)
+    
+    @DELETE("api/states/{id}")
+    suspend fun deleteSaveState(@Path("id") id: Int)
+    
 }
 
 data class GameResponse(
