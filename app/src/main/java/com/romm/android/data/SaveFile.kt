@@ -49,3 +49,18 @@ data class SaveStateResponse(
     val limit: Int,
     val offset: Int
 )
+
+data class Screenshot(
+    val id: Int,
+    val name: String? = null,
+    val file_name: String,
+    val file_path: String,
+    val full_path: String? = null,
+    val download_path: String? = null,
+    val file_size_bytes: Long,
+    val file_extension: String,
+    val rom_id: Int,
+    val user_id: Int,
+    val created_at: String,
+    val updated_at: String
+)

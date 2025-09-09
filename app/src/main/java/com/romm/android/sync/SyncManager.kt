@@ -2,6 +2,7 @@ package com.romm.android.sync
 
 import android.content.Context
 import android.util.Log
+import androidx.documentfile.provider.DocumentFile
 import com.romm.android.data.*
 import com.romm.android.network.RomMApiService
 import com.romm.android.utils.DownloadManager
@@ -657,7 +658,32 @@ class SyncManager @Inject constructor(
                 SyncItemType.SAVE_STATE -> {
                     // Always create new file with fresh timestamp instead of updating
                     Log.d("SyncManager", if (remoteItem != null) "Creating new version of save state (instead of updating)" else "Creating new save state")
-                    apiService.uploadSaveState(romId, localItem.emulator, documentFile, onProgress)
+                    val uploadedState = apiService.uploadSaveState(romId, localItem.emulator, documentFile, onProgress)
+                    
+                    // Check for matching screenshot file
+                    val screenshotFile = findMatchingScreenshot(localItem, settings)
+                    if (screenshotFile != null) {
+                        Log.d("SyncManager", "Found matching screenshot for save state: ${screenshotFile.name}")
+                        try {
+                            val screenshot = apiService.uploadScreenshot(
+                                romId = romId,
+                                stateId = uploadedState.id,
+                                documentFile = screenshotFile,
+                                originalSaveStateFileName = uploadedState.file_name // Use the timestamped filename from server
+                            )
+                            if (screenshot != null) {
+                                Log.d("SyncManager", "Successfully uploaded screenshot: ${screenshot.file_name}")
+                            } else {
+                                Log.w("SyncManager", "Failed to upload screenshot for save state ${localItem.fileName}")
+                            }
+                        } catch (e: Exception) {
+                            Log.w("SyncManager", "Error uploading screenshot for ${localItem.fileName}", e)
+                        }
+                    } else {
+                        Log.d("SyncManager", "No matching screenshot found for save state: ${localItem.fileName}")
+                    }
+                    
+                    uploadedState
                 }
             }
             
@@ -682,6 +708,50 @@ class SyncManager @Inject constructor(
         } catch (e: Exception) {
             Log.e("SyncManager", "Failed to upload ${localItem.fileName}", e)
             false
+        }
+    }
+    
+    private fun findMatchingScreenshot(localItem: LocalSyncItem, settings: AppSettings): DocumentFile? {
+        if (localItem.type != SyncItemType.SAVE_STATE) return null
+        
+        try {
+            // Get the base directory for save states
+            val baseUri = settings.saveStatesDirectory
+            if (baseUri.isEmpty()) return null
+            
+            Log.d("SyncManager", "Looking for screenshot matching save state: ${localItem.fileName}")
+            
+            // Get the directory containing the save state file
+            val saveStateDocumentFile = fileScanner.getDocumentFileForPath(baseUri, localItem.relativePathFromBaseDir)
+            if (saveStateDocumentFile == null || saveStateDocumentFile.parentFile == null) {
+                Log.d("SyncManager", "Could not get parent directory for save state file")
+                return null
+            }
+            
+            val parentDir = saveStateDocumentFile.parentFile!!
+            
+            // Look for a PNG file with the same full name (including extension) + .png
+            // e.g., "Super Metroid.state5" -> "Super Metroid.state5.png"
+            val expectedScreenshotName = "${localItem.fileName}.png"
+            
+            Log.d("SyncManager", "Looking for screenshot with name: $expectedScreenshotName")
+            
+            // Search for the matching screenshot
+            val matchingScreenshot = parentDir.listFiles()?.find { file ->
+                file.name == expectedScreenshotName && file.isFile
+            }
+            
+            if (matchingScreenshot != null) {
+                Log.d("SyncManager", "Found matching screenshot: ${matchingScreenshot.name}")
+                return matchingScreenshot
+            } else {
+                Log.d("SyncManager", "No matching screenshot found for: ${localItem.fileName}")
+                return null
+            }
+            
+        } catch (e: Exception) {
+            Log.w("SyncManager", "Error searching for matching screenshot", e)
+            return null
         }
     }
     

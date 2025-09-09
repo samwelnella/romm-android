@@ -13,6 +13,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import androidx.documentfile.provider.DocumentFile
 import android.content.Context
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -145,6 +147,20 @@ interface RomMApi {
     
     @POST("api/states/delete")
     suspend fun deleteSaveStates(@Body request: DeleteStatesRequest): Response<ResponseBody>
+    
+    @Multipart
+    @POST("api/screenshots")
+    suspend fun uploadScreenshot(
+        @Query("rom_id") romId: Int,
+        @Query("state_id") stateId: Int,
+        @Part screenshotFile: MultipartBody.Part
+    ): Screenshot
+    
+    @GET("api/screenshots")
+    suspend fun getScreenshots(
+        @Query("rom_id") romId: Int? = null,
+        @Query("state_id") stateId: Int? = null
+    ): List<Screenshot>
     
 }
 
@@ -649,6 +665,228 @@ class RomMApiService @Inject constructor(
         android.util.Log.d("RomMApiService", "Update save state with multipart body: $timestampedFileName")
         
         return getApi().updateSaveStateMultipart(saveStateId, multipartBody)
+    }
+    
+    suspend fun uploadScreenshot(
+        romId: Int,
+        stateId: Int,
+        documentFile: DocumentFile,
+        originalSaveStateFileName: String
+    ): Screenshot? {
+        return try {
+            val fileName = documentFile.name ?: throw IllegalArgumentException("Screenshot file name is required")
+            
+            android.util.Log.d("RomMApiService", "Uploading screenshot: $fileName for save state: $originalSaveStateFileName")
+            
+            // Extract timestamp from save state filename using improved regex
+            val timestamp = extractTimestampFromSaveStateFileName(originalSaveStateFileName)
+            if (timestamp == null) {
+                android.util.Log.w("RomMApiService", "Could not extract timestamp from save state filename: $originalSaveStateFileName")
+                // Use current timestamp as fallback
+                val now = java.time.LocalDateTime.now()
+                val fallbackTimestamp = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
+                android.util.Log.d("RomMApiService", "Using fallback timestamp: $fallbackTimestamp")
+                return uploadScreenshotWithTimestamp(romId, stateId, documentFile, originalSaveStateFileName, fallbackTimestamp)
+            }
+            
+            return uploadScreenshotWithTimestamp(romId, stateId, documentFile, originalSaveStateFileName, timestamp)
+            
+        } catch (e: Exception) {
+            android.util.Log.e("RomMApiService", "Failed to upload screenshot", e)
+            null
+        }
+    }
+    
+    private suspend fun uploadScreenshotWithTimestamp(
+        romId: Int,
+        stateId: Int,
+        documentFile: DocumentFile,
+        originalSaveStateFileName: String,
+        timestamp: String
+    ): Screenshot? {
+        return try {
+            android.util.Log.d("RomMApiService", "🕐 Extracted timestamp from save state: $timestamp")
+            
+            // Extract base name from save state filename (improved logic)
+            val baseName = extractBaseNameFromSaveStateFileName(originalSaveStateFileName)
+            
+            // Create screenshot filename with matching timestamp AND android-sync- prefix
+            val screenshotFileName = "android-sync-$baseName [$timestamp].png"
+            
+            android.util.Log.d("RomMApiService", "📸 Screenshot filename with matching timestamp: $screenshotFileName")
+            android.util.Log.d("RomMApiService", "🔗 Linking to save state ID: $stateId")
+            
+            // Create streaming request body
+            val requestBody = object : RequestBody() {
+                override fun contentType() = "image/png".toMediaType()
+                
+                override fun contentLength() = documentFile.length()
+                
+                override fun writeTo(sink: okio.BufferedSink) {
+                    applicationContext.contentResolver.openInputStream(documentFile.uri)?.use { inputStream ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            sink.write(buffer, 0, bytesRead)
+                        }
+                    } ?: throw IllegalArgumentException("Could not open input stream")
+                }
+            }
+            
+            // Create multipart request with proper form data (matching Python implementation)
+            val multipartBodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
+            
+            // Add the screenshot file
+            multipartBodyBuilder.addFormDataPart(
+                "screenshotFile",
+                screenshotFileName,
+                requestBody
+            )
+            
+            // Add form data fields (matching Python implementation)
+            multipartBodyBuilder.addFormDataPart("rom_id", romId.toString())
+            multipartBodyBuilder.addFormDataPart("state_id", stateId.toString())
+            multipartBodyBuilder.addFormDataPart("filename", screenshotFileName)
+            multipartBodyBuilder.addFormDataPart("file_name", screenshotFileName)
+            
+            val multipartBody = multipartBodyBuilder.build()
+            
+            android.util.Log.d("RomMApiService", "📡 Uploading screenshot with parameters:")
+            android.util.Log.d("RomMApiService", "  - rom_id: $romId")
+            android.util.Log.d("RomMApiService", "  - state_id: $stateId")
+            android.util.Log.d("RomMApiService", "  - filename: $screenshotFileName")
+            android.util.Log.d("RomMApiService", "  - file_name: $screenshotFileName")
+            
+            // Use direct HTTP call since we need to send multipart form data differently
+            uploadScreenshotMultipart(romId, stateId, multipartBody)
+            
+        } catch (e: Exception) {
+            android.util.Log.e("RomMApiService", "Failed to upload screenshot with timestamp", e)
+            null
+        }
+    }
+    
+    private suspend fun uploadScreenshotMultipart(
+        romId: Int,
+        stateId: Int,
+        multipartBody: MultipartBody
+    ): Screenshot = withContext(Dispatchers.IO) {
+        val settings = settingsRepository.getCurrentSettings()
+        val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
+        val url = "$baseUrl/api/screenshots?rom_id=$romId&state_id=$stateId"
+        
+        val request = okhttp3.Request.Builder()
+            .url(url)
+            .post(multipartBody)
+            // Add authentication if needed
+            .apply {
+                if (settings.username.isNotEmpty() || settings.password.isNotEmpty()) {
+                    val credential = Credentials.basic(settings.username, settings.password)
+                    header("Authorization", credential)
+                }
+            }
+            .build()
+        
+        // Create a new OkHttpClient with same configuration as the API
+        val clientBuilder = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+        
+        if (settings.username.isNotEmpty() || settings.password.isNotEmpty()) {
+            val authInterceptor = Interceptor { chain ->
+                val credential = Credentials.basic(settings.username, settings.password)
+                val authenticatedRequest = chain.request().newBuilder()
+                    .header("Authorization", credential)
+                    .build()
+                chain.proceed(authenticatedRequest)
+            }
+            clientBuilder.addInterceptor(authInterceptor)
+        }
+        
+        val client = clientBuilder.build()
+        val response = client.newCall(request).execute()
+        
+        response.use {
+            if (it.isSuccessful) {
+                android.util.Log.d("RomMApiService", "🎉 Screenshot with matching timestamp uploaded!")
+                val responseBody = it.body?.string() ?: ""
+                android.util.Log.d("RomMApiService", "📡 Screenshot upload response: ${it.code}")
+                android.util.Log.d("RomMApiService", "   Response: ${responseBody.take(200)}")
+                
+                // Parse response to Screenshot object
+                val gson = com.google.gson.Gson()
+                gson.fromJson(responseBody, Screenshot::class.java)
+            } else {
+                val errorBody = it.body?.string() ?: ""
+                android.util.Log.e("RomMApiService", "❌ Screenshot upload failed: ${it.code} - ${errorBody.take(200)}")
+                throw Exception("Screenshot upload failed with code: ${it.code}")
+            }
+        }
+    }
+    
+    private fun extractTimestampFromSaveStateFileName(fileName: String): String? {
+        // Extract timestamp using improved regex pattern (matching Python implementation)
+        // Matches patterns like [YYYY-MM-DD HH-MM-SS-mmm] including colons and various separators
+        val timestampPattern = Regex("""\[([0-9\-\s:]+)\]""")
+        val matchResult = timestampPattern.find(fileName)
+        return matchResult?.groupValues?.get(1)
+    }
+    
+    private fun extractBaseNameFromSaveStateFileName(fileName: String): String {
+        // Extract base name (remove timestamp and extension) - matching Python implementation
+        
+        // First, try to match the pattern before the first bracket (timestamp)
+        val baseNamePattern = Regex("""^(.+?)\s*\[""")
+        val baseNameMatch = baseNamePattern.find(fileName)
+        
+        val baseName = if (baseNameMatch != null) {
+            baseNameMatch.groupValues[1].trim()
+        } else {
+            // Fallback: use stem of original filename and remove any existing timestamps
+            val withoutExtension = fileName.substringBeforeLast(".")
+            // Remove any existing timestamp patterns
+            val timestampPattern = Regex("""\s*\[.*?\]""")
+            withoutExtension.replace(timestampPattern, "")
+        }
+        
+        // Remove android-sync- prefix if present
+        return if (baseName.startsWith("android-sync-")) {
+            baseName.removePrefix("android-sync-")
+        } else {
+            baseName
+        }.trim()
+    }
+    
+    suspend fun getScreenshotsForSaveState(stateId: Int): List<Screenshot> {
+        return try {
+            val screenshots = getApi().getScreenshots(stateId = stateId)
+            android.util.Log.d("RomMApiService", "Found ${screenshots.size} screenshots for save state ID: $stateId")
+            screenshots
+        } catch (e: Exception) {
+            android.util.Log.w("RomMApiService", "Failed to get screenshots for save state $stateId", e)
+            emptyList()
+        }
+    }
+    
+    suspend fun downloadScreenshot(screenshot: Screenshot): Response<ResponseBody> {
+        // Use the download_path directly as provided by the server metadata
+        val rawDownloadPath = screenshot.download_path ?: "/api/raw/assets/${screenshot.file_path}"
+        
+        // URL encode the path properly
+        val encodedPath = encodeDownloadPath(rawDownloadPath)
+        
+        // Get the base URL from current settings to construct full URL
+        val settings = settingsRepository.getCurrentSettings()
+        val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
+        val fullUrl = "$baseUrl$encodedPath"
+        
+        android.util.Log.d("RomMApiService", "Raw screenshot download path: $rawDownloadPath")
+        android.util.Log.d("RomMApiService", "Encoded screenshot download path: $encodedPath")
+        android.util.Log.d("RomMApiService", "Full screenshot URL: $fullUrl")
+        
+        return getApi().downloadFromUrl(fullUrl)
     }
     
     suspend fun deleteSave(id: Int): Boolean {

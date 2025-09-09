@@ -166,6 +166,11 @@ class FileScanner @Inject constructor(
         
         return when (type) {
             SyncItemType.SAVE_FILE -> {
+                // Exclude PNG files (these are screenshots handled separately)
+                if (lowerName.endsWith(".png")) {
+                    return false
+                }
+                
                 // Common save file extensions
                 lowerName.endsWith(".sav") ||
                 lowerName.endsWith(".srm") ||
@@ -179,9 +184,14 @@ class FileScanner @Inject constructor(
                 lowerName.endsWith(".eep") ||
                 lowerName.endsWith(".bkp") ||
                 // RetroArch naming patterns
-                (lowerName.contains(".") && !lowerName.endsWith(".state") && !lowerName.endsWith(".st"))
+                (lowerName.contains(".") && !lowerName.endsWith(".state") && !lowerName.endsWith(".st") && !lowerName.endsWith(".png"))
             }
             SyncItemType.SAVE_STATE -> {
+                // Exclude PNG files (these are screenshots handled separately)
+                if (lowerName.endsWith(".png")) {
+                    return false
+                }
+                
                 // Common save state extensions
                 lowerName.endsWith(".state") ||
                 lowerName.endsWith(".st") ||
