@@ -140,11 +140,11 @@ interface RomMApi {
         @Part stateFile: MultipartBody.Part
     ): SaveState
     
-    @DELETE("api/saves/{id}")
-    suspend fun deleteSave(@Path("id") id: Int)
+    @POST("api/saves/delete")
+    suspend fun deleteSaves(@Body request: DeleteSavesRequest): Response<ResponseBody>
     
-    @DELETE("api/states/{id}")
-    suspend fun deleteSaveState(@Path("id") id: Int)
+    @POST("api/states/delete")
+    suspend fun deleteSaveStates(@Body request: DeleteStatesRequest): Response<ResponseBody>
     
 }
 
@@ -157,6 +157,14 @@ data class GameResponse(
 
 data class LoginResponse(
     val msg: String
+)
+
+data class DeleteSavesRequest(
+    val saves: List<Int>
+)
+
+data class DeleteStatesRequest(
+    val states: List<Int>
 )
 
 @Singleton
@@ -641,6 +649,38 @@ class RomMApiService @Inject constructor(
         android.util.Log.d("RomMApiService", "Update save state with multipart body: $timestampedFileName")
         
         return getApi().updateSaveStateMultipart(saveStateId, multipartBody)
+    }
+    
+    suspend fun deleteSave(id: Int): Boolean {
+        android.util.Log.d("RomMApiService", "Deleting save file with ID: $id")
+        val request = DeleteSavesRequest(saves = listOf(id))
+        val response = getApi().deleteSaves(request)
+        
+        // For error responses, read from errorBody instead of body
+        val responseBody = if (response.isSuccessful) {
+            response.body()?.string() ?: ""
+        } else {
+            response.errorBody()?.string() ?: ""
+        }
+        
+        android.util.Log.d("RomMApiService", "Delete save response code: ${response.code()}, body: '$responseBody'")
+        return response.isSuccessful
+    }
+    
+    suspend fun deleteSaveState(id: Int): Boolean {
+        android.util.Log.d("RomMApiService", "Deleting save state with ID: $id")
+        val request = DeleteStatesRequest(states = listOf(id))
+        val response = getApi().deleteSaveStates(request)
+        
+        // For error responses, read from errorBody instead of body
+        val responseBody = if (response.isSuccessful) {
+            response.body()?.string() ?: ""
+        } else {
+            response.errorBody()?.string() ?: ""
+        }
+        
+        android.util.Log.d("RomMApiService", "Delete save state response code: ${response.code()}, body: '$responseBody'")
+        return response.isSuccessful
     }
     
     private fun encodeDownloadPath(rawPath: String): String {

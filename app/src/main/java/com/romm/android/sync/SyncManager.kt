@@ -778,9 +778,9 @@ class SyncManager @Inject constructor(
             // Get all files of this type for the ROM
             val allItems = when (localItem.type) {
                 SyncItemType.SAVE_FILE -> {
-                    apiService.getSavesByRom(romId).filter { 
-                        it.file_name.startsWith("android-sync-") &&
-                        extractBaseFileName(it.file_name) == baseFileName
+                    apiService.getSaves(romId = romId).filter { saveFile ->
+                        saveFile.file_name.startsWith("android-sync-") &&
+                        extractBaseFileName(saveFile.file_name) == baseFileName
                     }.map { saveFile ->
                         RemoteSyncItem(
                             saveFile = saveFile,
@@ -798,9 +798,9 @@ class SyncManager @Inject constructor(
                     }
                 }
                 SyncItemType.SAVE_STATE -> {
-                    apiService.getSaveStatesByRom(romId).filter { 
-                        it.file_name.startsWith("android-sync-") &&
-                        extractBaseFileName(it.file_name) == baseFileName
+                    apiService.getStates(romId = romId).filter { saveState ->
+                        saveState.file_name.startsWith("android-sync-") &&
+                        extractBaseFileName(saveState.file_name) == baseFileName
                     }.map { saveState ->
                         RemoteSyncItem(
                             saveFile = null,
@@ -825,7 +825,7 @@ class SyncManager @Inject constructor(
             }
             
             // Sort by timestamp descending (newest first)
-            val sortedItems = allItems.sortedByDescending { it.lastModified }
+            val sortedItems = allItems.sortedByDescending { remoteItem -> remoteItem.lastModified }
             val itemsToDelete = sortedItems.drop(historyLimit)
             
             Log.d("SyncManager", "Found ${allItems.size} versions, deleting ${itemsToDelete.size} oldest ones")
@@ -833,15 +833,26 @@ class SyncManager @Inject constructor(
             // Delete old versions
             for (item in itemsToDelete) {
                 try {
-                    when (item.type) {
+                    Log.d("SyncManager", "Attempting to delete old version: ${item.fileName} (ID: ${item.id})")
+                    val success = when (item.type) {
                         SyncItemType.SAVE_FILE -> {
                             apiService.deleteSave(item.id)
-                            Log.d("SyncManager", "Deleted old save file version: ${item.fileName}")
                         }
                         SyncItemType.SAVE_STATE -> {
                             apiService.deleteSaveState(item.id)
-                            Log.d("SyncManager", "Deleted old save state version: ${item.fileName}")
                         }
+                    }
+                    if (success) {
+                        Log.d("SyncManager", "Successfully deleted old version: ${item.fileName}")
+                    } else {
+                        Log.w("SyncManager", "Delete operation returned false for: ${item.fileName}")
+                    }
+                } catch (e: retrofit2.HttpException) {
+                    val errorBody = e.response()?.errorBody()?.string()
+                    Log.w("SyncManager", "HTTP ${e.code()} deleting ${item.fileName}: $errorBody", e)
+                    if (e.code() == 403 || e.code() == 401) {
+                        Log.w("SyncManager", "Insufficient permissions for deletion - skipping cleanup for remaining items")
+                        break // Stop trying to delete if it's a permission issue
                     }
                 } catch (e: Exception) {
                     Log.w("SyncManager", "Failed to delete old version ${item.fileName}", e)
