@@ -84,16 +84,7 @@ fun SaveStatesScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         if (platforms.isEmpty() && !isLoading) {
             item {
@@ -233,16 +224,7 @@ fun SaveStateDetailScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         items(games) { gameWithStates ->
             GameSaveStateCard(
@@ -371,16 +353,7 @@ fun GameSaveStateListScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         items(states) { saveState ->
             SaveStateCard(

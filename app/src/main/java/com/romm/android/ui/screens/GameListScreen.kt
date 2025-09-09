@@ -102,38 +102,7 @@ fun GameListScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
             
-            if (isLoading) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (loadingProgress != null) {
-                                LinearProgressIndicator(
-                                    progress = { loadingProgress.current.toFloat() / loadingProgress.total.toFloat() },
-                                    modifier = Modifier.fillMaxWidth(0.8f)
-                                )
-                                Text(
-                                    text = loadingProgress.message,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                CircularProgressIndicator()
-                                Text(
-                                    text = "Loading games...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            // Removed inline progress - now handled by floating overlay
             
             if (filteredGames.isEmpty() && searchQuery.isNotEmpty()) {
                 item {
@@ -202,6 +171,50 @@ fun GameListScreen(
                     }
                 }
             )
+        }
+        
+        // Floating progress indicator positioned at bottom to avoid SwipeRefresh overlap
+        if (isLoading) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+                    .fillMaxWidth(0.9f),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (loadingProgress != null) {
+                        // Show specific progress when available
+                        LinearProgressIndicator(
+                            progress = { loadingProgress.current.toFloat() / loadingProgress.total.toFloat() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = loadingProgress.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        // Show indeterminate progress when starting
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = "Loading games...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }

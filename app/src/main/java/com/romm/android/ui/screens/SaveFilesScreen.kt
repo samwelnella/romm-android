@@ -84,16 +84,7 @@ fun SaveFilesScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         if (platforms.isEmpty() && !isLoading) {
             item {
@@ -233,16 +224,7 @@ fun SaveFileDetailScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         items(games) { gameWithSaves ->
             GameSaveFileCard(
@@ -371,16 +353,7 @@ fun GameSaveFileListScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         items(saves) { saveFile ->
             SaveFileCard(

@@ -138,16 +138,7 @@ fun PlatformListScreen(
             )
         }
         
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
+        // SwipeRefresh handles the loading indicator, no need for redundant CircularProgressIndicator
         
         items(platforms) { platform ->
             PlatformCard(
