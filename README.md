@@ -81,14 +81,22 @@ On first launch, configure your RomM server settings:
 
 ## Save File & Save State Sync
 
-The app supports bidirectional sync of emulator save data with your RomM server:
+The app supports bidirectional sync of RetroArch save data with your RomM server:
+
+### ⚠️ **Important Disclaimer**
+**USE AT YOUR OWN RISK.** This feature can potentially overwrite your local game saves and save states on your emulation device. While the app is designed to only affect RomM saves and states with `android-sync-` prepended to the filename, **always make backups of your important save files and save states before using this feature.** Use caution, especially with bidirectional sync mode.
+
+### Compatibility
+- **Primary Target**: RetroArch cores and their save files/save states
+- **File Format**: Designed for RetroArch's `.srm`, `.state`, `.st0`, `.st1`, etc. formats
+- **Other Emulators**: May work with standalone emulators that use similar file structures, but compatibility is not guaranteed
 
 ### Features
-- **Automatic Detection**: Scans your emulator directories for save files and save states
+- **Automatic Detection**: Scans your RetroArch save directories for save files and save states
 - **Timestamped Versions**: Each upload creates a unique timestamped version (`android-sync-GameName [YYYY-MM-DD HH-mm-ss-SSS].ext`)
-- **Smart Conflict Resolution**: Always downloads the most recent version based on file timestamps
+- **Smart Conflict Resolution**: Always downloads the most recent version based on file timestamps  
 - **History Management**: Configurable limits to keep only recent versions on the server
-- **Platform Support**: Works with any platform/emulator that stores saves as files
+- **Screenshot Support**: Automatically uploads/downloads screenshots associated with save states
 
 ### Sync Modes
 - **Upload Only**: Send local saves to server
@@ -120,8 +128,10 @@ Games and save data are organized in your configured directories:
 [SAVE_STATES_DIR]/
 └── snes/
     └── snes9x/
-        ├── Super Mario World.state
-        └── The Legend of Zelda.state
+        ├── Super Mario World.state0
+        ├── Super Mario World.state0.png
+        ├── The Legend of Zelda.state1
+        └── The Legend of Zelda.state1.png
 ```
 
 ## External App Integration
