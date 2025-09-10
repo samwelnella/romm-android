@@ -856,34 +856,96 @@ class UnifiedDownloadWorker @AssistedInject constructor(
     }
     
     /**
-     * Get or create directory for saves/states
+     * Get or create directory for saves/states with improved race condition handling
      */
     private fun getOrCreateSaveDirectory(baseDir: DocumentFile, dirName: String): DocumentFile? {
-        // Try to find existing directory
-        val existingDir = baseDir.findFile(dirName)
-        if (existingDir != null && existingDir.isDirectory) {
-            Log.d("UnifiedDownloadWorker", "Using existing directory: $dirName")
-            return existingDir
+        // Multiple attempts to handle race conditions between concurrent workers
+        repeat(5) { attempt ->
+            // Always check for existing directory first
+            val existingDir = findAnySaveDirectory(baseDir, dirName)
+            if (existingDir != null) {
+                Log.d("UnifiedDownloadWorker", "Using existing save directory: ${existingDir.name}")
+                return existingDir
+            }
+            
+            // Try to create new directory
+            Log.d("UnifiedDownloadWorker", "Attempt ${attempt + 1}: Creating save directory: $dirName")
+            try {
+                val newDir = baseDir.createDirectory(dirName)
+                if (newDir != null && newDir.name == dirName) {
+                    Log.d("UnifiedDownloadWorker", "Successfully created save directory: ${newDir.name}")
+                    return newDir
+                } else if (newDir != null) {
+                    // Android created a numbered variant - delete it and try again
+                    Log.w("UnifiedDownloadWorker", "Android created numbered variant: ${newDir.name}, deleting and retrying")
+                    newDir.delete()
+                }
+            } catch (e: Exception) {
+                Log.w("UnifiedDownloadWorker", "Save directory creation attempt ${attempt + 1} failed", e)
+            }
+            
+            // Small delay before retry to avoid tight loop
+            Thread.sleep(50)
         }
         
-        // Create new directory
-        Log.d("UnifiedDownloadWorker", "Creating directory: $dirName")
-        val newDir = baseDir.createDirectory(dirName)
-        
-        if (newDir != null) {
-            Log.d("UnifiedDownloadWorker", "Successfully created directory: ${newDir.name}")
-            return newDir
+        // Final attempt: check one more time if another worker created it
+        val finalCheck = findAnySaveDirectory(baseDir, dirName)
+        if (finalCheck != null) {
+            Log.d("UnifiedDownloadWorker", "Found save directory created by another worker: ${finalCheck.name}")
+            // Clean up any numbered variants that might have been created accidentally
+            cleanupNumberedSaveVariants(baseDir, dirName)
+            return finalCheck
         }
         
-        // Creation failed, try to find it again (race condition handling)
-        val retryDir = baseDir.findFile(dirName)
-        if (retryDir != null && retryDir.isDirectory) {
-            Log.d("UnifiedDownloadWorker", "Found directory created by another worker: ${retryDir.name}")
-            return retryDir
-        }
-        
-        Log.e("UnifiedDownloadWorker", "Failed to create or find directory: $dirName")
+        Log.e("UnifiedDownloadWorker", "Failed to create or find save directory after 5 attempts: $dirName")
         return null
+    }
+    
+    /**
+     * Find save directory - ONLY exact match, ignore numbered variants
+     */
+    private fun findAnySaveDirectory(baseDir: DocumentFile, dirName: String): DocumentFile? {
+        val files = try {
+            baseDir.listFiles()
+        } catch (e: Exception) {
+            Log.e("UnifiedDownloadWorker", "Error listing save directory files", e)
+            emptyArray()
+        }
+        
+        // Only exact match - ignore numbered variants to prevent race condition issues
+        for (file in files) {
+            if (file.isDirectory && file.name == dirName) {
+                return file
+            }
+        }
+        
+        return null
+    }
+    
+    /**
+     * Clean up numbered variant save directories that were created accidentally due to race conditions
+     */
+    private fun cleanupNumberedSaveVariants(baseDir: DocumentFile, dirName: String) {
+        try {
+            val files = baseDir.listFiles()
+            files.forEach { file ->
+                if (file.isDirectory) {
+                    val name = file.name ?: return@forEach
+                    val regex = Regex("^${Regex.escape(dirName)}\\s*\\(\\d+\\)$")
+                    if (regex.matches(name)) {
+                        Log.d("UnifiedDownloadWorker", "Cleaning up numbered variant save directory: $name")
+                        // Move contents to the main directory if it has any files
+                        val mainDir = findAnySaveDirectory(baseDir, dirName)
+                        if (mainDir != null) {
+                            moveDirectoryContents(file, mainDir)
+                        }
+                        file.delete()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("UnifiedDownloadWorker", "Error cleaning up numbered save variants", e)
+        }
     }
     
     /**
