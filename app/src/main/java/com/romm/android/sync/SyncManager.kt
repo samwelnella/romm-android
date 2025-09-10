@@ -408,6 +408,7 @@ class SyncManager @Inject constructor(
         for (remoteItem in remoteItems) {
             val baseFileName = extractBaseFileName(remoteItem.fileName)
             val smartIdentifier = "${remoteItem.platform}/${baseFileName}"
+            Log.d("SyncManager", "Remote identifier: '$smartIdentifier' for file: '${remoteItem.fileName}' (base: '$baseFileName')")
             
             val existingItem = remoteBySmartIdentifier[smartIdentifier]
             if (existingItem == null) {
@@ -435,6 +436,7 @@ class SyncManager @Inject constructor(
         // Map local items by filename
         for (localItem in localItems) {
             val smartIdentifier = "${localItem.platform}/${localItem.fileName}"
+            Log.d("SyncManager", "Local identifier: '$smartIdentifier' for file: '${localItem.fileName}'")
             localBySmartIdentifier[smartIdentifier] = localItem
         }
         
@@ -444,6 +446,8 @@ class SyncManager @Inject constructor(
         for (identifier in allSmartIdentifiers) {
             val localItem = localBySmartIdentifier[identifier]
             val remoteItem = remoteBySmartIdentifier[identifier]
+            
+            Log.d("SyncManager", "Processing identifier: '$identifier' - Local: ${localItem?.fileName ?: "NONE"}, Remote: ${remoteItem?.fileName ?: "NONE"}")
             
             val comparison = when {
                 localItem != null && remoteItem != null -> {

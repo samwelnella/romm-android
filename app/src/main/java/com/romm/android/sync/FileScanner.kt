@@ -87,7 +87,7 @@ class FileScanner @Inject constructor(
                 type = type,
                 items = items,
                 basePath = "",
-                maxDepth = 2 // Only scan [platform]/[emulator]/ - ignore deeper subdirectories
+                maxDepth = 3 // Scan [platform]/[emulator]/[files] - allow one more level for actual files
             )
             
         } catch (e: Exception) {
