@@ -387,7 +387,7 @@ object PlatformMapper {
         "telstar-arcade" to "telstar-arcade",
         "terebikko-slash-see-n-say-video-phone" to "terebikko-slash-see-n-say-video-phone",
         "terminal" to "terminal",
-        "tg16" to "tg16",
+        "turbografx16--1" to "tg16",
         "thomson-mo5" to "moto",
         "thomson-to" to "to8",
         "ti-82" to "ti-82",

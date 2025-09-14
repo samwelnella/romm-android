@@ -37,7 +37,18 @@ object EmulatorMapper {
         "fusion" to "Fusion",
         
         // 3DO emulators
-        "opera" to "Opera"
+        "opera" to "Opera",
+
+        // Atari emulators
+        "virtual jaguar" to "Virtual Jaguar",
+        "virtualjaguar" to "Virtual Jaguar",
+        "jaguar" to "Virtual Jaguar",
+
+        // TurboGrafx-16 / PC Engine emulators
+        "mednaffe" to "Mednaffe",
+        "ootake" to "Ootake",
+        "magic engine" to "Magic Engine",
+        "magicengine" to "Magic Engine"
     )
     
     /**

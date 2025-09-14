@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.romm.android.data.AppSettings
+import com.romm.android.utils.PlatformMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -229,9 +230,12 @@ class FileScanner @Inject constructor(
         
         val platform = when {
             pathParts.isNotEmpty() -> {
-                // Try to identify platform from path
-                val firstPart = pathParts.first().lowercase()
-                mapDirectoryToPlatform(firstPart)
+                // Try to identify platform from path using PlatformMapper
+                val firstPart = pathParts.first()
+                // Convert ES-DE folder name to RomM platform slug
+                val mappedPlatform = PlatformMapper.getRommSlugFromEsdeFolder(firstPart)
+                Log.d("FileScanner", "Platform mapping: '$firstPart' -> '$mappedPlatform'")
+                mappedPlatform
             }
             else -> {
                 // Try to infer from filename
@@ -242,11 +246,11 @@ class FileScanner @Inject constructor(
         val emulator = when {
             pathParts.size >= 2 -> {
                 // Second part is emulator: [PLATFORM_NAME]/[EMULATOR_NAME]/savefile
-                identifyEmulator(pathParts[1])
+                pathParts[1]
             }
             pathParts.size == 1 -> {
                 // First part might be emulator if no platform folder
-                identifyEmulator(pathParts[0])
+                pathParts[0]
             }
             else -> null
         }
@@ -266,50 +270,7 @@ class FileScanner @Inject constructor(
         )
     }
     
-    private fun mapDirectoryToPlatform(directoryName: String): String {
-        val lower = directoryName.lowercase()
-        return when {
-            // Nintendo systems
-            lower.contains("nes") && !lower.contains("snes") -> "nes"
-            lower.contains("snes") || lower.contains("super nintendo") -> "snes"
-            lower.contains("n64") || lower.contains("nintendo 64") -> "n64"
-            lower.contains("gamecube") || lower.contains("gc") -> "gc" 
-            lower.contains("wii") && !lower.contains("wiiu") -> "wii"
-            lower.contains("wiiu") || lower.contains("wii u") -> "wiiu"
-            lower.contains("gb") && !lower.contains("gba") -> "gb"
-            lower.contains("gbc") || lower.contains("game boy color") -> "gbc"
-            lower.contains("gba") || lower.contains("game boy advance") -> "gba"
-            lower.contains("nds") || lower.contains("nintendo ds") -> "nds"
-            lower.contains("3ds") || lower.contains("nintendo 3ds") -> "3ds"
-            
-            // Sega systems  
-            lower.contains("genesis") || lower.contains("megadrive") -> "genesis"
-            lower.contains("sega cd") || lower.contains("segacd") -> "segacd"
-            lower.contains("saturn") -> "saturn"
-            lower.contains("dreamcast") -> "dreamcast"
-            lower.contains("master system") || lower.contains("mastersystem") -> "sms"
-            lower.contains("game gear") || lower.contains("gamegear") -> "gg"
-            
-            // Sony systems
-            lower.contains("psx") || lower.contains("playstation") && !lower.contains("2") -> "psx"
-            lower.contains("ps2") || lower.contains("playstation 2") -> "ps2"
-            lower.contains("psp") -> "psp"
-            
-            // Arcade
-            lower.contains("arcade") || lower.contains("mame") -> "arcade"
-            
-            // Other systems
-            lower.contains("atari2600") || lower.contains("atari 2600") -> "atari2600"
-            lower.contains("lynx") -> "lynx"
-            
-            // Default to directory name if no mapping found
-            else -> directoryName
-        }
-    }
     
-    private fun identifyEmulator(directoryName: String): String? {
-        return EmulatorMapper.identifyEmulator(directoryName)
-    }
     
     private fun inferPlatformFromFilename(fileName: String): String {
         // Try to infer platform from filename patterns

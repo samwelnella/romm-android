@@ -326,6 +326,11 @@ class SyncManager @Inject constructor(
 
             Log.d("SyncManager", "Retrieved ${saves.size} save files and ${states.size} save states from server")
 
+            // Debug: log first few saves to see what we got
+            saves.take(3).forEach { save ->
+                Log.d("SyncManager", "Sample save: ${save.file_name} -> file_path: ${save.file_path}")
+            }
+
             onProgress?.invoke(SyncProgress(
                 currentStep = "Processing files...",
                 itemsProcessed = 0,
@@ -369,7 +374,7 @@ class SyncManager @Inject constructor(
                         }
                     }
 
-                    remoteItems.add(RemoteSyncItem(
+                    val remoteItem = RemoteSyncItem(
                         saveFile = save,
                         type = SyncItemType.SAVE_FILE,
                         platform = platformFromPath,
@@ -379,7 +384,10 @@ class SyncManager @Inject constructor(
                         lastModified = parseDateTime(save.updated_at ?: save.created_at),
                         sizeBytes = save.file_size_bytes,
                         romId = save.rom_id
-                    ))
+                    )
+
+                    Log.d("SyncManager", "Added remote save: ${remoteItem.fileName} -> platform: '${remoteItem.platform}'")
+                    remoteItems.add(remoteItem)
 
                     processedCount++
 
@@ -562,16 +570,19 @@ class SyncManager @Inject constructor(
         for (remoteItem in remoteItems) {
             val baseFileName = extractBaseFileName(remoteItem.fileName)
             val smartIdentifier = "${remoteItem.platform}/${baseFileName}"
-            Log.d("SyncManager", "Remote identifier: '$smartIdentifier' for file: '${remoteItem.fileName}' (base: '$baseFileName')")
-            
+            Log.d("SyncManager", "Remote identifier: '$smartIdentifier' for file: '${remoteItem.fileName}' (base: '$baseFileName', platform: '${remoteItem.platform}')")
+
             val existingItem = remoteBySmartIdentifier[smartIdentifier]
             if (existingItem == null) {
                 // No existing version, add this one
+                Log.d("SyncManager", "Adding new remote identifier: '$smartIdentifier'")
                 remoteBySmartIdentifier[smartIdentifier] = remoteItem
             } else {
+                Log.d("SyncManager", "Found existing remote identifier: '$smartIdentifier', comparing versions")
                 // Compare timestamps to keep the most recent version
                 val currentTimestamp = extractTimestampFromFileName(remoteItem.fileName)
                 val existingTimestamp = extractTimestampFromFileName(existingItem.fileName)
+                Log.d("SyncManager", "Timestamp comparison: current=${currentTimestamp}, existing=${existingTimestamp}")
                 
                 if (currentTimestamp != null && existingTimestamp != null) {
                     if (currentTimestamp.isAfter(existingTimestamp)) {
@@ -596,11 +607,15 @@ class SyncManager @Inject constructor(
         
         // Find matches and conflicts using smart identifiers
         val allSmartIdentifiers = (localBySmartIdentifier.keys + remoteBySmartIdentifier.keys).distinct()
-        
+
+        Log.d("SyncManager", "Smart identifiers summary:")
+        Log.d("SyncManager", "  Local identifiers (${localBySmartIdentifier.size}): ${localBySmartIdentifier.keys.take(5)}")
+        Log.d("SyncManager", "  Remote identifiers (${remoteBySmartIdentifier.size}): ${remoteBySmartIdentifier.keys.take(5)}")
+
         for (identifier in allSmartIdentifiers) {
             val localItem = localBySmartIdentifier[identifier]
             val remoteItem = remoteBySmartIdentifier[identifier]
-            
+
             Log.d("SyncManager", "Processing identifier: '$identifier' - Local: ${localItem?.fileName ?: "NONE"}, Remote: ${remoteItem?.fileName ?: "NONE"}")
             
             val comparison = when {
