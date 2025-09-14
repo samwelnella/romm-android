@@ -934,8 +934,8 @@ class SyncManager @Inject constructor(
             Log.d("SyncManager", "  Platform: ${localItem.platform}")  
             Log.d("SyncManager", "  Game name from file: '${localItem.gameName}'")
             
-            // Extract the base filename without extension for matching
-            val baseFileName = localItem.fileName.substringBeforeLast(".")
+            // Extract the base filename without save file extensions for matching
+            val baseFileName = extractGameNameFromSaveFileName(localItem.fileName)
             Log.d("SyncManager", "  Base filename: '$baseFileName'")
             
             // Search for games by name and platform
@@ -1112,5 +1112,38 @@ class SyncManager @Inject constructor(
         } catch (e: Exception) {
             Log.w("SyncManager", "Failed to cleanup old versions for ${localItem.fileName}", e)
         }
+    }
+
+    private fun extractGameNameFromSaveFileName(fileName: String): String {
+        // Known save file extensions that should be removed from game name
+        val saveFileExtensions = listOf(
+            ".srm", ".sav", ".save", ".mcr", ".mc", ".gme", ".fla", ".dat", ".eep", ".bkp",
+            ".state", ".st", ".st0", ".st1", ".st2", ".st3", ".st4", ".st5", ".st6", ".st7", ".st8", ".st9",
+            ".ss0", ".ss1", ".sts", ".savestate",
+            ".cdrom" // Add cdrom extension for games like "Alien vs Predator.cdrom.srm"
+        )
+
+        var gameName = fileName
+
+        // Remove extensions from the end, in order of priority
+        // This handles cases like "Game.cdrom.srm" -> "Game"
+        for (extension in saveFileExtensions.sortedByDescending { it.length }) {
+            if (gameName.lowercase().endsWith(extension.lowercase())) {
+                gameName = gameName.dropLast(extension.length)
+                break // Only remove one extension per pass
+            }
+        }
+
+        // If we still have extensions, try again (for cases like .cdrom.srm)
+        if (gameName != fileName) {
+            for (extension in saveFileExtensions.sortedByDescending { it.length }) {
+                if (gameName.lowercase().endsWith(extension.lowercase())) {
+                    gameName = gameName.dropLast(extension.length)
+                    break
+                }
+            }
+        }
+
+        return gameName.ifBlank { fileName.substringBeforeLast(".") }
     }
 }

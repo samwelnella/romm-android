@@ -180,6 +180,8 @@ class FileScanner @Inject constructor(
                 lowerName.endsWith(".dat") ||
                 lowerName.endsWith(".eep") ||
                 lowerName.endsWith(".bkp") ||
+                // CD-ROM specific save files (e.g., Game.cdrom.srm)
+                lowerName.contains(".cdrom.") ||
                 // RetroArch naming patterns
                 (lowerName.contains(".") && !lowerName.endsWith(".state") && !lowerName.endsWith(".st") && !lowerName.endsWith(".png"))
             }
@@ -255,8 +257,8 @@ class FileScanner @Inject constructor(
             else -> null
         }
         
-        // Extract game name from filename (remove extension)
-        val gameNameFromFile = fileName.substringBeforeLast(".")
+        // Extract game name from filename (remove all save file extensions)
+        val gameNameFromFile = extractGameNameFromFileName(fileName)
         val gameName = when {
             pathParts.size >= 2 -> pathParts.last() // Directory name as game name
             gameNameFromFile.isNotBlank() -> gameNameFromFile
@@ -333,5 +335,38 @@ class FileScanner @Inject constructor(
             Log.e("FileScanner", "Error getting DocumentFile for path: $relativePath", e)
             return null
         }
+    }
+
+    private fun extractGameNameFromFileName(fileName: String): String {
+        // Known save file extensions that should be removed from game name
+        val saveFileExtensions = listOf(
+            ".srm", ".sav", ".save", ".mcr", ".mc", ".gme", ".fla", ".dat", ".eep", ".bkp",
+            ".state", ".st", ".st0", ".st1", ".st2", ".st3", ".st4", ".st5", ".st6", ".st7", ".st8", ".st9",
+            ".ss0", ".ss1", ".sts", ".savestate",
+            ".cdrom" // Add cdrom extension for games like "Alien vs Predator.cdrom.srm"
+        )
+
+        var gameName = fileName
+
+        // Remove extensions from the end, in order of priority
+        // This handles cases like "Game.cdrom.srm" -> "Game"
+        for (extension in saveFileExtensions.sortedByDescending { it.length }) {
+            if (gameName.lowercase().endsWith(extension.lowercase())) {
+                gameName = gameName.dropLast(extension.length)
+                break // Only remove one extension per pass
+            }
+        }
+
+        // If we still have extensions, try again (for cases like .cdrom.srm)
+        if (gameName != fileName) {
+            for (extension in saveFileExtensions.sortedByDescending { it.length }) {
+                if (gameName.lowercase().endsWith(extension.lowercase())) {
+                    gameName = gameName.dropLast(extension.length)
+                    break
+                }
+            }
+        }
+
+        return gameName.ifBlank { fileName.substringBeforeLast(".") }
     }
 }
