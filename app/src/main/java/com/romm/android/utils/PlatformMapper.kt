@@ -496,4 +496,13 @@ object PlatformMapper {
     fun getEsdeFolderNames(): Set<String> {
         return rommToEsdeMapping.values.toSet()
     }
+
+    /**
+     * Reverse lookup: Get RomM platform slug from ES-DE folder name
+     * @param esdeFolderName The ES-DE folder name
+     * @return The RomM platform slug, or the original folder name if no mapping exists
+     */
+    fun getRommSlugFromEsdeFolder(esdeFolderName: String): String {
+        return rommToEsdeMapping.entries.find { it.value == esdeFolderName }?.key ?: esdeFolderName
+    }
 }

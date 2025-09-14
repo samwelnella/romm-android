@@ -6,6 +6,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.romm.android.data.*
 import com.romm.android.network.RomMApiService
 import com.romm.android.utils.DownloadManager
+import com.romm.android.utils.PlatformMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -282,7 +283,6 @@ class SyncManager @Inject constructor(
         try {
             Log.d("SyncManager", "Starting remote items fetch...")
 
-            // Step 1: Get all save files and states in parallel
             onProgress?.invoke(SyncProgress(
                 currentStep = "Fetching save files and states...",
                 itemsProcessed = 0,
@@ -293,14 +293,12 @@ class SyncManager @Inject constructor(
                 hasErrors = false
             ))
 
+            // Get all save files and states (no individual API calls needed!)
             val saves = if (syncRequest.saveFilesEnabled) {
                 try {
                     Log.d("SyncManager", "Fetching all save files from server...")
                     apiService.getSaves().filter {
-                        it.file_name.startsWith("android-sync-", ignoreCase = true) &&
-                        (syncRequest.emulatorFilter?.let { filter ->
-                            it.emulator?.equals(filter, ignoreCase = true) == true
-                        } ?: true)
+                        it.file_name.startsWith("android-sync-", ignoreCase = true)
                     }
                 } catch (e: Exception) {
                     Log.e("SyncManager", "Failed to load save files", e)
@@ -315,10 +313,7 @@ class SyncManager @Inject constructor(
                 try {
                     Log.d("SyncManager", "Fetching all save states from server...")
                     apiService.getStates().filter {
-                        it.file_name.startsWith("android-sync-", ignoreCase = true) &&
-                        (syncRequest.emulatorFilter?.let { filter ->
-                            it.emulator?.equals(filter, ignoreCase = true) == true
-                        } ?: true)
+                        it.file_name.startsWith("android-sync-", ignoreCase = true)
                     }
                 } catch (e: Exception) {
                     Log.e("SyncManager", "Failed to load save states", e)
@@ -331,56 +326,8 @@ class SyncManager @Inject constructor(
 
             Log.d("SyncManager", "Retrieved ${saves.size} save files and ${states.size} save states from server")
 
-            // Step 2: Collect all unique ROM IDs that we need to fetch
-            val allRomIds = (saves.map { it.rom_id } + states.map { it.rom_id }).distinct()
-            Log.d("SyncManager", "Need to fetch game details for ${allRomIds.size} unique ROMs")
-
-            if (allRomIds.isEmpty()) {
-                Log.d("SyncManager", "No ROMs to process, returning empty list")
-                return emptyList()
-            }
-
-            // Step 3: Bulk fetch all game data with progress reporting
             onProgress?.invoke(SyncProgress(
-                currentStep = "Loading game details...",
-                itemsProcessed = 0,
-                totalItems = allRomIds.size,
-                bytesTransferred = 0,
-                totalBytes = 0,
-                isComplete = false,
-                hasErrors = false
-            ))
-
-            val gameCache = mutableMapOf<Int, Game>()
-            for ((index, romId) in allRomIds.withIndex()) {
-                try {
-                    // Update progress every few items
-                    if (index % 10 == 0 || index == allRomIds.size - 1) {
-                        onProgress?.invoke(SyncProgress(
-                            currentStep = "Loading game details... (${index + 1}/${allRomIds.size})",
-                            itemsProcessed = index,
-                            totalItems = allRomIds.size,
-                            bytesTransferred = 0,
-                            totalBytes = 0,
-                            isComplete = false,
-                            hasErrors = false
-                        ))
-                    }
-
-                    val game = apiService.getGame(romId)
-                    gameCache[romId] = game
-                    Log.d("SyncManager", "Cached game: ${game.name ?: game.fs_name_no_ext} (${game.platform_slug})")
-
-                } catch (e: Exception) {
-                    Log.w("SyncManager", "Could not fetch game details for ROM ID $romId", e)
-                }
-            }
-
-            Log.d("SyncManager", "Successfully cached ${gameCache.size} games")
-
-            // Step 4: Process save files using cached game data
-            onProgress?.invoke(SyncProgress(
-                currentStep = "Processing save files...",
+                currentStep = "Processing files...",
                 itemsProcessed = 0,
                 totalItems = saves.size + states.size,
                 bytesTransferred = 0,
@@ -390,102 +337,130 @@ class SyncManager @Inject constructor(
             ))
 
             var processedCount = 0
+
+            // Process save files - extract platform from file_path directly!
             for (save in saves) {
-                val game = gameCache[save.rom_id]
-                if (game == null) {
-                    Log.w("SyncManager", "No cached game data for save file ${save.file_name} (ROM ID: ${save.rom_id})")
-                    continue
-                }
+                try {
+                    // Extract platform from file_path: "users/xxx/saves/PLATFORM/rom_id/emulator"
+                    val platformFromPath = extractPlatformFromFilePath(save.file_path)
+                    if (platformFromPath == null) {
+                        Log.w("SyncManager", "Could not extract platform from file_path: ${save.file_path}")
+                        continue
+                    }
 
-                // Apply platform filter if specified
-                if (syncRequest.platformFilter != null &&
-                    !game.platform_slug.equals(syncRequest.platformFilter, ignoreCase = true)) {
-                    Log.d("SyncManager", "Skipped save file due to platform filter: ${save.file_name}")
-                    continue
-                }
+                    // Apply filters
+                    if (syncRequest.platformFilter != null &&
+                        !platformFromPath.equals(syncRequest.platformFilter, ignoreCase = true)) {
+                        Log.d("SyncManager", "Skipped save file due to platform filter: ${save.file_name} (platform: $platformFromPath)")
+                        continue
+                    }
 
-                // Apply game filter if specified (match against ROM fs_name_no_ext)
-                if (syncRequest.gameFilter != null &&
-                    !game.fs_name_no_ext.equals(syncRequest.gameFilter, ignoreCase = true)) {
-                    Log.d("SyncManager", "Skipped save file due to game filter: ${save.file_name}")
-                    continue
-                }
+                    if (syncRequest.emulatorFilter != null &&
+                        (save.emulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true)) {
+                        Log.d("SyncManager", "Skipped save file due to emulator filter: ${save.file_name}")
+                        continue
+                    }
 
-                remoteItems.add(RemoteSyncItem(
-                    saveFile = save,
-                    type = SyncItemType.SAVE_FILE,
-                    platform = game.platform_slug,
-                    emulator = save.emulator,
-                    gameName = game.name ?: game.fs_name_no_ext,
-                    fileName = save.file_name,
-                    lastModified = parseDateTime(save.updated_at ?: save.created_at),
-                    sizeBytes = save.file_size_bytes,
-                    romId = save.rom_id
-                ))
+                    if (syncRequest.gameFilter != null) {
+                        val gameNameFromFilename = extractGameNameFromFilename(save.file_name)
+                        if (!gameNameFromFilename.equals(syncRequest.gameFilter, ignoreCase = true)) {
+                            Log.d("SyncManager", "Skipped save file due to game filter: ${save.file_name}")
+                            continue
+                        }
+                    }
 
-                processedCount++
-
-                // Update progress every 10 items
-                if (processedCount % 10 == 0) {
-                    onProgress?.invoke(SyncProgress(
-                        currentStep = "Processing save files... ($processedCount/${saves.size + states.size})",
-                        itemsProcessed = processedCount,
-                        totalItems = saves.size + states.size,
-                        bytesTransferred = 0,
-                        totalBytes = 0,
-                        isComplete = false,
-                        hasErrors = false
+                    remoteItems.add(RemoteSyncItem(
+                        saveFile = save,
+                        type = SyncItemType.SAVE_FILE,
+                        platform = platformFromPath,
+                        emulator = save.emulator,
+                        gameName = extractGameNameFromFilename(save.file_name),
+                        fileName = save.file_name,
+                        lastModified = parseDateTime(save.updated_at ?: save.created_at),
+                        sizeBytes = save.file_size_bytes,
+                        romId = save.rom_id
                     ))
+
+                    processedCount++
+
+                    // Update progress every 10 items
+                    if (processedCount % 10 == 0) {
+                        onProgress?.invoke(SyncProgress(
+                            currentStep = "Processing files... ($processedCount/${saves.size + states.size})",
+                            itemsProcessed = processedCount,
+                            totalItems = saves.size + states.size,
+                            bytesTransferred = 0,
+                            totalBytes = 0,
+                            isComplete = false,
+                            hasErrors = false
+                        ))
+                    }
+
+                } catch (e: Exception) {
+                    Log.w("SyncManager", "Error processing save file ${save.file_name}", e)
                 }
             }
 
-            // Step 5: Process save states using cached game data
+            // Process save states - extract platform from file_path directly!
             for (state in states) {
-                val game = gameCache[state.rom_id]
-                if (game == null) {
-                    Log.w("SyncManager", "No cached game data for save state ${state.file_name} (ROM ID: ${state.rom_id})")
-                    continue
-                }
+                try {
+                    // Extract platform from file_path: "users/xxx/saves/PLATFORM/rom_id/emulator" or "users/xxx/states/PLATFORM/rom_id"
+                    val platformFromPath = extractPlatformFromFilePath(state.file_path)
+                    if (platformFromPath == null) {
+                        Log.w("SyncManager", "Could not extract platform from file_path: ${state.file_path}")
+                        continue
+                    }
 
-                // Apply platform filter if specified
-                if (syncRequest.platformFilter != null &&
-                    !game.platform_slug.equals(syncRequest.platformFilter, ignoreCase = true)) {
-                    Log.d("SyncManager", "Skipped save state due to platform filter: ${state.file_name}")
-                    continue
-                }
+                    // Apply filters
+                    if (syncRequest.platformFilter != null &&
+                        !platformFromPath.equals(syncRequest.platformFilter, ignoreCase = true)) {
+                        Log.d("SyncManager", "Skipped save state due to platform filter: ${state.file_name} (platform: $platformFromPath)")
+                        continue
+                    }
 
-                // Apply game filter if specified (match against ROM fs_name_no_ext)
-                if (syncRequest.gameFilter != null &&
-                    !game.fs_name_no_ext.equals(syncRequest.gameFilter, ignoreCase = true)) {
-                    Log.d("SyncManager", "Skipped save state due to game filter: ${state.file_name}")
-                    continue
-                }
+                    if (syncRequest.emulatorFilter != null &&
+                        (state.emulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true)) {
+                        Log.d("SyncManager", "Skipped save state due to emulator filter: ${state.file_name}")
+                        continue
+                    }
 
-                remoteItems.add(RemoteSyncItem(
-                    saveState = state,
-                    type = SyncItemType.SAVE_STATE,
-                    platform = game.platform_slug,
-                    emulator = state.emulator,
-                    gameName = game.name ?: game.fs_name_no_ext,
-                    fileName = state.file_name,
-                    lastModified = parseDateTime(state.updated_at ?: state.created_at),
-                    sizeBytes = state.file_size_bytes,
-                    romId = state.rom_id
-                ))
+                    if (syncRequest.gameFilter != null) {
+                        val gameNameFromFilename = extractGameNameFromFilename(state.file_name)
+                        if (!gameNameFromFilename.equals(syncRequest.gameFilter, ignoreCase = true)) {
+                            Log.d("SyncManager", "Skipped save state due to game filter: ${state.file_name}")
+                            continue
+                        }
+                    }
 
-                processedCount++
-
-                // Update progress every 10 items
-                if (processedCount % 10 == 0 || processedCount == saves.size + states.size) {
-                    onProgress?.invoke(SyncProgress(
-                        currentStep = "Processing save states... ($processedCount/${saves.size + states.size})",
-                        itemsProcessed = processedCount,
-                        totalItems = saves.size + states.size,
-                        bytesTransferred = 0,
-                        totalBytes = 0,
-                        isComplete = false,
-                        hasErrors = false
+                    remoteItems.add(RemoteSyncItem(
+                        saveState = state,
+                        type = SyncItemType.SAVE_STATE,
+                        platform = platformFromPath,
+                        emulator = state.emulator,
+                        gameName = extractGameNameFromFilename(state.file_name),
+                        fileName = state.file_name,
+                        lastModified = parseDateTime(state.updated_at ?: state.created_at),
+                        sizeBytes = state.file_size_bytes,
+                        romId = state.rom_id
                     ))
+
+                    processedCount++
+
+                    // Update progress every 10 items
+                    if (processedCount % 10 == 0 || processedCount == saves.size + states.size) {
+                        onProgress?.invoke(SyncProgress(
+                            currentStep = "Processing files... ($processedCount/${saves.size + states.size})",
+                            itemsProcessed = processedCount,
+                            totalItems = saves.size + states.size,
+                            bytesTransferred = 0,
+                            totalBytes = 0,
+                            isComplete = false,
+                            hasErrors = false
+                        ))
+                    }
+
+                } catch (e: Exception) {
+                    Log.w("SyncManager", "Error processing save state ${state.file_name}", e)
                 }
             }
 
@@ -502,7 +477,7 @@ class SyncManager @Inject constructor(
         if (dateString.isNullOrBlank()) {
             return LocalDateTime.now()
         }
-        
+
         return try {
             // Simple parsing for ISO format timestamps - only used as fallback
             when {
@@ -512,6 +487,63 @@ class SyncManager @Inject constructor(
         } catch (e: Exception) {
             Log.w("SyncManager", "Could not parse date: $dateString", e)
             LocalDateTime.now()
+        }
+    }
+
+    /**
+     * Extract platform slug from RomM file_path.
+     * Examples:
+     * "users/xxx/saves/gba/48152/mgba" -> "gba"
+     * "users/xxx/saves/snes/75934/Snes9x" -> "snes"
+     * "users/xxx/saves/jaguar/55336" -> "jaguar"
+     * "users/xxx/states/turbografx16--1/76774" -> "turbografx16--1"
+     */
+    private fun extractPlatformFromFilePath(filePath: String): String? {
+        return try {
+            // Split path: "users/userid/saves/PLATFORM/romid/emulator" or "users/userid/states/PLATFORM/romid"
+            val parts = filePath.split("/").filter { it.isNotEmpty() }
+            Log.d("SyncManager", "Extracting platform from path: $filePath -> parts: $parts")
+
+            // Find the platform part after "saves" or "states"
+            val saveOrStateIndex = parts.indexOfFirst { it == "saves" || it == "states" }
+            if (saveOrStateIndex != -1 && saveOrStateIndex + 1 < parts.size) {
+                val platform = parts[saveOrStateIndex + 1]
+                Log.d("SyncManager", "Extracted platform: '$platform' from path: $filePath")
+                return platform
+            }
+
+            Log.w("SyncManager", "Could not find platform in path: $filePath")
+            null
+        } catch (e: Exception) {
+            Log.e("SyncManager", "Error extracting platform from path: $filePath", e)
+            null
+        }
+    }
+
+    /**
+     * Extract game name from android-sync filename.
+     * Examples:
+     * "android-sync-Super Mario World (USA) [2025-09-12 00-07-00-000].srm" -> "Super Mario World (USA)"
+     * "android-sync-Metroid - Zero Mission (Europe) (En,Fr,De,Es,It) [2025-09-05 23-17-09-884].srm" -> "Metroid - Zero Mission (Europe) (En,Fr,De,Es,It)"
+     */
+    private fun extractGameNameFromFilename(fileName: String): String {
+        return try {
+            // Remove "android-sync-" prefix
+            val withoutPrefix = if (fileName.startsWith("android-sync-", ignoreCase = true)) {
+                fileName.removePrefix("android-sync-")
+            } else {
+                fileName
+            }
+
+            // Remove timestamp and extension: "Game Name [YYYY-MM-DD HH-mm-ss-SSS].ext"
+            val timestampPattern = Regex("\\s\\[\\d{4}-\\d{2}-\\d{2}\\s\\d{2}-\\d{2}-\\d{2}-\\d{3}\\]\\.\\w+$")
+            val gameName = withoutPrefix.replace(timestampPattern, "")
+
+            Log.d("SyncManager", "Extracted game name: '$gameName' from filename: $fileName")
+            gameName
+        } catch (e: Exception) {
+            Log.e("SyncManager", "Error extracting game name from filename: $fileName", e)
+            fileName.substringBeforeLast(".")
         }
     }
     
@@ -893,7 +925,14 @@ class SyncManager @Inject constructor(
             
             // Search for games by name and platform
             val platforms = apiService.getPlatforms()
-            val platform = platforms.find { 
+
+            // Convert ES-DE folder name to RomM platform slug if needed
+            val rommPlatformSlug = PlatformMapper.getRommSlugFromEsdeFolder(localItem.platform)
+            Log.d("SyncManager", "  Converted '${localItem.platform}' to RomM slug: '$rommPlatformSlug'")
+
+            val platform = platforms.find {
+                it.slug.equals(rommPlatformSlug, ignoreCase = true) ||
+                it.display_name.equals(rommPlatformSlug, ignoreCase = true) ||
                 it.slug.equals(localItem.platform, ignoreCase = true) ||
                 it.display_name.equals(localItem.platform, ignoreCase = true)
             }
