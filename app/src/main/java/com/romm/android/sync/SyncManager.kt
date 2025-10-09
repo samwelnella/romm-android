@@ -1133,35 +1133,34 @@ class SyncManager @Inject constructor(
             // Sort by timestamp descending (newest first)
             val sortedItems = allItems.sortedByDescending { remoteItem -> remoteItem.lastModified }
             val itemsToDelete = sortedItems.drop(historyLimit)
-            
+
             Log.d("SyncManager", "Found ${allItems.size} versions, deleting ${itemsToDelete.size} oldest ones")
-            
-            // Delete old versions
-            for (item in itemsToDelete) {
+
+            // Collect all IDs to delete and use batch deletion
+            val idsToDelete = itemsToDelete.map { it.id }
+
+            if (idsToDelete.isNotEmpty()) {
                 try {
-                    Log.d("SyncManager", "Attempting to delete old version: ${item.fileName} (ID: ${item.id})")
-                    val success = when (item.type) {
+                    Log.d("SyncManager", "Batch deleting ${idsToDelete.size} old versions: $idsToDelete")
+                    val deletedCount = when (localItem.type) {
                         SyncItemType.SAVE_FILE -> {
-                            apiService.deleteSave(item.id)
+                            apiService.deleteSavesBatch(idsToDelete)
                         }
                         SyncItemType.SAVE_STATE -> {
-                            apiService.deleteSaveState(item.id)
+                            apiService.deleteSaveStatesBatch(idsToDelete)
                         }
                     }
-                    if (success) {
-                        Log.d("SyncManager", "Successfully deleted old version: ${item.fileName}")
+
+                    if (deletedCount > 0) {
+                        Log.d("SyncManager", "Successfully deleted $deletedCount old versions in batch")
                     } else {
-                        Log.w("SyncManager", "Delete operation returned false for: ${item.fileName}")
+                        Log.w("SyncManager", "Batch delete operation returned 0 deleted items")
                     }
                 } catch (e: retrofit2.HttpException) {
                     val errorBody = e.response()?.errorBody()?.string()
-                    Log.w("SyncManager", "HTTP ${e.code()} deleting ${item.fileName}: $errorBody", e)
-                    if (e.code() == 403 || e.code() == 401) {
-                        Log.w("SyncManager", "Insufficient permissions for deletion - skipping cleanup for remaining items")
-                        break // Stop trying to delete if it's a permission issue
-                    }
+                    Log.w("SyncManager", "HTTP ${e.code()} batch deleting old versions: $errorBody", e)
                 } catch (e: Exception) {
-                    Log.w("SyncManager", "Failed to delete old version ${item.fileName}", e)
+                    Log.w("SyncManager", "Failed to batch delete old versions", e)
                 }
             }
             

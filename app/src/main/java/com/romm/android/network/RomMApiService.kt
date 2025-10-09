@@ -909,18 +909,72 @@ class RomMApiService @Inject constructor(
         android.util.Log.d("RomMApiService", "Deleting save state with ID: $id")
         val request = DeleteStatesRequest(states = listOf(id))
         val response = getApi().deleteSaveStates(request)
-        
+
         // For error responses, read from errorBody instead of body
         val responseBody = if (response.isSuccessful) {
             response.body()?.string() ?: ""
         } else {
             response.errorBody()?.string() ?: ""
         }
-        
+
         android.util.Log.d("RomMApiService", "Delete save state response code: ${response.code()}, body: '$responseBody'")
         return response.isSuccessful
     }
-    
+
+    /**
+     * Delete multiple save files in a single batch API call.
+     *
+     * @param ids List of save file IDs to delete
+     * @return Number of successfully deleted save files
+     */
+    suspend fun deleteSavesBatch(ids: List<Int>): Int {
+        if (ids.isEmpty()) {
+            android.util.Log.d("RomMApiService", "No save files to delete (empty list)")
+            return 0
+        }
+
+        android.util.Log.d("RomMApiService", "Batch deleting ${ids.size} save files: $ids")
+        val request = DeleteSavesRequest(saves = ids)
+        val response = getApi().deleteSaves(request)
+
+        return if (response.isSuccessful) {
+            val responseBody = response.body()?.string() ?: ""
+            android.util.Log.d("RomMApiService", "Batch delete saves successful: ${response.code()}, body: '$responseBody'")
+            ids.size // Assume all were deleted successfully
+        } else {
+            val errorBody = response.errorBody()?.string() ?: ""
+            android.util.Log.e("RomMApiService", "Batch delete saves failed: ${response.code()}, error: '$errorBody'")
+            0
+        }
+    }
+
+    /**
+     * Delete multiple save states in a single batch API call.
+     *
+     * @param ids List of save state IDs to delete
+     * @return Number of successfully deleted save states
+     */
+    suspend fun deleteSaveStatesBatch(ids: List<Int>): Int {
+        if (ids.isEmpty()) {
+            android.util.Log.d("RomMApiService", "No save states to delete (empty list)")
+            return 0
+        }
+
+        android.util.Log.d("RomMApiService", "Batch deleting ${ids.size} save states: $ids")
+        val request = DeleteStatesRequest(states = ids)
+        val response = getApi().deleteSaveStates(request)
+
+        return if (response.isSuccessful) {
+            val responseBody = response.body()?.string() ?: ""
+            android.util.Log.d("RomMApiService", "Batch delete states successful: ${response.code()}, body: '$responseBody'")
+            ids.size // Assume all were deleted successfully
+        } else {
+            val errorBody = response.errorBody()?.string() ?: ""
+            android.util.Log.e("RomMApiService", "Batch delete states failed: ${response.code()}, error: '$errorBody'")
+            0
+        }
+    }
+
     private fun encodeDownloadPath(rawPath: String): String {
         // Split the path and query parameters
         val parts = rawPath.split("?")
