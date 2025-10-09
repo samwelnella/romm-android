@@ -5,7 +5,7 @@ import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.romm.android.data.AppSettings
 import com.romm.android.utils.PlatformMapper
-import com.romm.android.utils.SyncLogger
+import com.romm.android.utils.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -23,37 +23,37 @@ class FileScanner @Inject constructor(
     suspend fun scanLocalSaveFiles(settings: AppSettings): List<LocalSyncItem> = withContext(Dispatchers.IO) {
         val items = mutableListOf<LocalSyncItem>()
 
-        SyncLogger.v(tag = "FileScanner", message = "Starting scan with settings:")
-        SyncLogger.v(tag = "FileScanner", message = "Save Files Directory: '${settings.saveFilesDirectory}'")
-        SyncLogger.v(tag = "FileScanner", message = "Save States Directory: '${settings.saveStatesDirectory}'")
+        AppLogger.v(tag = "FileScanner", message = "Starting scan with settings:")
+        AppLogger.v(tag = "FileScanner", message = "Save Files Directory: '${settings.saveFilesDirectory}'")
+        AppLogger.v(tag = "FileScanner", message = "Save States Directory: '${settings.saveStatesDirectory}'")
 
         if (settings.saveFilesDirectory.isNotEmpty()) {
-            SyncLogger.i(tag = "FileScanner", message = "Scanning save files directory...")
+            AppLogger.i(tag = "FileScanner", message = "Scanning save files directory...")
             val saveFilesItems = scanDirectory(
                 settings.saveFilesDirectory,
                 SyncItemType.SAVE_FILE,
                 "Save Files"
             )
-            SyncLogger.i(tag = "FileScanner", message = "Found ${saveFilesItems.size} save files")
+            AppLogger.i(tag = "FileScanner", message = "Found ${saveFilesItems.size} save files")
             items.addAll(saveFilesItems)
         } else {
-            SyncLogger.w(tag = "FileScanner", message = "Save files directory is not configured")
+            AppLogger.w(tag = "FileScanner", message = "Save files directory is not configured")
         }
 
         if (settings.saveStatesDirectory.isNotEmpty()) {
-            SyncLogger.i(tag = "FileScanner", message = "Scanning save states directory...")
+            AppLogger.i(tag = "FileScanner", message = "Scanning save states directory...")
             val saveStatesItems = scanDirectory(
                 settings.saveStatesDirectory,
                 SyncItemType.SAVE_STATE,
                 "Save States"
             )
-            SyncLogger.i(tag = "FileScanner", message = "Found ${saveStatesItems.size} save states")
+            AppLogger.i(tag = "FileScanner", message = "Found ${saveStatesItems.size} save states")
             items.addAll(saveStatesItems)
         } else {
-            SyncLogger.w(tag = "FileScanner", message = "Save states directory is not configured")
+            AppLogger.w(tag = "FileScanner", message = "Save states directory is not configured")
         }
 
-        SyncLogger.i(tag = "FileScanner", message = "Total found: ${items.size} local sync items")
+        AppLogger.i(tag = "FileScanner", message = "Total found: ${items.size} local sync items")
         items
     }
     
@@ -65,24 +65,24 @@ class FileScanner @Inject constructor(
         val items = mutableListOf<LocalSyncItem>()
         
         try {
-            SyncLogger.v(tag = "FileScanner", message = "Attempting to access directory: $directoryUri")
+            AppLogger.v(tag = "FileScanner", message = "Attempting to access directory: $directoryUri")
             val baseDir = DocumentFile.fromTreeUri(context, Uri.parse(directoryUri))
             if (baseDir == null) {
-                SyncLogger.e(tag = "FileScanner", message = "$baseTypeName directory could not be parsed: $directoryUri")
+                AppLogger.e(tag = "FileScanner", message = "$baseTypeName directory could not be parsed: $directoryUri")
                 return@withContext items
             }
 
             if (!baseDir.exists()) {
-                SyncLogger.e(tag = "FileScanner", message = "$baseTypeName directory does not exist: $directoryUri")
+                AppLogger.e(tag = "FileScanner", message = "$baseTypeName directory does not exist: $directoryUri")
                 return@withContext items
             }
 
             if (!baseDir.isDirectory) {
-                SyncLogger.e(tag = "FileScanner", message = "$baseTypeName path is not a directory: $directoryUri")
+                AppLogger.e(tag = "FileScanner", message = "$baseTypeName path is not a directory: $directoryUri")
                 return@withContext items
             }
 
-            SyncLogger.v(tag = "FileScanner", message = "$baseTypeName directory accessible, scanning...")
+            AppLogger.v(tag = "FileScanner", message = "$baseTypeName directory accessible, scanning...")
             scanDirectoryRecursive(
                 directory = baseDir,
                 type = type,
@@ -92,7 +92,7 @@ class FileScanner @Inject constructor(
             )
             
         } catch (e: Exception) {
-            SyncLogger.e(tag = "FileScanner", message = "Error scanning $baseTypeName directory", throwable = e)
+            AppLogger.e(tag = "FileScanner", message = "Error scanning $baseTypeName directory", throwable = e)
         }
         
         items
@@ -106,13 +106,13 @@ class FileScanner @Inject constructor(
         maxDepth: Int
     ) {
         if (maxDepth <= 0) {
-            SyncLogger.w(tag = "FileScanner", message = "Max depth reached, stopping recursion")
+            AppLogger.w(tag = "FileScanner", message = "Max depth reached, stopping recursion")
             return
         }
         
         try {
             val files = directory.listFiles()
-            SyncLogger.v(tag = "FileScanner", message = "Directory '${directory.name}' contains ${files?.size ?: 0} items")
+            AppLogger.v(tag = "FileScanner", message = "Directory '${directory.name}' contains ${files?.size ?: 0} items")
 
             files?.forEach { file ->
                 if (file.isDirectory) {
@@ -124,12 +124,12 @@ class FileScanner @Inject constructor(
                     val fileName = file.name ?: return@forEach
                     val fileSize = file.length()
 
-                    SyncLogger.v(tag = "FileScanner", message = "Found file: $fileName (${fileSize} bytes)")
+                    AppLogger.v(tag = "FileScanner", message = "Found file: $fileName (${fileSize} bytes)")
 
                     if (isSyncableFile(fileName, type)) {
                         val metadata = extractFileMetadata(basePath, fileName, type)
 
-                        SyncLogger.v(tag = "FileScanner", message = "Syncable file: $fileName -> Platform: ${metadata.platform}, Emulator: ${metadata.emulator}")
+                        AppLogger.v(tag = "FileScanner", message = "Syncable file: $fileName -> Platform: ${metadata.platform}, Emulator: ${metadata.emulator}")
                         
                         // Add all files with valid extensions - no emulator whitelist needed
                         items.add(
@@ -149,12 +149,12 @@ class FileScanner @Inject constructor(
                             )
                         )
                     } else {
-                        SyncLogger.v(tag = "FileScanner", message = "File '$fileName' is not syncable for type $type")
+                        AppLogger.v(tag = "FileScanner", message = "File '$fileName' is not syncable for type $type")
                     }
                 }
             }
         } catch (e: Exception) {
-            SyncLogger.e(tag = "FileScanner", message = "Error scanning directory: ${directory.name}", throwable = e)
+            AppLogger.e(tag = "FileScanner", message = "Error scanning directory: ${directory.name}", throwable = e)
         }
     }
     
@@ -236,7 +236,7 @@ class FileScanner @Inject constructor(
                 val firstPart = pathParts.first()
                 // Convert ES-DE folder name to RomM platform slug
                 val mappedPlatform = PlatformMapper.getRommSlugFromEsdeFolder(firstPart)
-                SyncLogger.v(tag = "FileScanner", message = "Platform mapping: '$firstPart' -> '$mappedPlatform'")
+                AppLogger.v(tag = "FileScanner", message = "Platform mapping: '$firstPart' -> '$mappedPlatform'")
                 mappedPlatform
             }
             else -> {
@@ -282,57 +282,57 @@ class FileScanner @Inject constructor(
     
     fun getDocumentFileForPath(baseUri: String, relativePath: String): DocumentFile? {
         try {
-            SyncLogger.v(tag = "FileScanner", message = "getDocumentFileForPath: baseUri='$baseUri', relativePath='$relativePath'")
+            AppLogger.v(tag = "FileScanner", message = "getDocumentFileForPath: baseUri='$baseUri', relativePath='$relativePath'")
 
             val baseDir = DocumentFile.fromTreeUri(context, Uri.parse(baseUri))
             if (baseDir == null) {
-                SyncLogger.e(tag = "FileScanner", message = "Failed to parse base URI: $baseUri")
+                AppLogger.e(tag = "FileScanner", message = "Failed to parse base URI: $baseUri")
                 return null
             }
 
             if (relativePath.isEmpty()) {
-                SyncLogger.v(tag = "FileScanner", message = "Empty relative path, returning base directory")
+                AppLogger.v(tag = "FileScanner", message = "Empty relative path, returning base directory")
                 return baseDir
             }
 
             // Split path and navigate step by step
             val pathParts = relativePath.split("/").filter { it.isNotEmpty() }
-            SyncLogger.v(tag = "FileScanner", message = "Path parts: $pathParts")
+            AppLogger.v(tag = "FileScanner", message = "Path parts: $pathParts")
 
             var currentDir: DocumentFile? = baseDir
 
             // Navigate to all parts (including the final file)
             for ((index, part) in pathParts.withIndex()) {
                 if (currentDir == null) {
-                    SyncLogger.e(tag = "FileScanner", message = "Current directory became null at part $index")
+                    AppLogger.e(tag = "FileScanner", message = "Current directory became null at part $index")
                     return null
                 }
 
-                SyncLogger.v(tag = "FileScanner", message = "Looking for part ${index + 1}/${pathParts.size}: '$part' in ${currentDir.name ?: "unknown"}")
+                AppLogger.v(tag = "FileScanner", message = "Looking for part ${index + 1}/${pathParts.size}: '$part' in ${currentDir.name ?: "unknown"}")
 
                 val foundItem = currentDir.findFile(part)
                 if (foundItem == null) {
-                    SyncLogger.e(tag = "FileScanner", message = "Could not find '$part' in directory '${currentDir.name ?: "unknown"}'")
+                    AppLogger.e(tag = "FileScanner", message = "Could not find '$part' in directory '${currentDir.name ?: "unknown"}'")
 
                     // Debug: List all files in current directory
                     val files = currentDir.listFiles()
-                    SyncLogger.v(tag = "FileScanner", message = "Directory '${currentDir.name ?: "unknown"}' contains:")
+                    AppLogger.v(tag = "FileScanner", message = "Directory '${currentDir.name ?: "unknown"}' contains:")
                     files?.forEach { file ->
-                        SyncLogger.v(tag = "FileScanner", message = "  - '${file.name ?: "unknown"}' (${if (file.isDirectory) "DIR" else "FILE"})")
+                        AppLogger.v(tag = "FileScanner", message = "  - '${file.name ?: "unknown"}' (${if (file.isDirectory) "DIR" else "FILE"})")
                     }
 
                     return null
                 }
 
-                SyncLogger.v(tag = "FileScanner", message = "Found '$part': ${foundItem.name ?: "unknown"} (${if (foundItem.isDirectory) "DIR" else "FILE"})")
+                AppLogger.v(tag = "FileScanner", message = "Found '$part': ${foundItem.name ?: "unknown"} (${if (foundItem.isDirectory) "DIR" else "FILE"})")
                 currentDir = foundItem
             }
 
-            SyncLogger.v(tag = "FileScanner", message = "Successfully found file: ${currentDir?.name ?: "unknown"}")
+            AppLogger.v(tag = "FileScanner", message = "Successfully found file: ${currentDir?.name ?: "unknown"}")
             return currentDir
             
         } catch (e: Exception) {
-            SyncLogger.e(tag = "FileScanner", message = "Error getting DocumentFile for path: $relativePath", throwable = e)
+            AppLogger.e(tag = "FileScanner", message = "Error getting DocumentFile for path: $relativePath", throwable = e)
             return null
         }
     }

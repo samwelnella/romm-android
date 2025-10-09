@@ -1,6 +1,5 @@
 package com.romm.android.ui.screens
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +23,7 @@ import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import com.romm.android.data.Game
+import com.romm.android.utils.AppLogger
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -86,8 +86,8 @@ fun GameDetailsScreen(
                 // Cover Image (on the right)
                 if (!game.path_cover_small.isNullOrEmpty() && hostUrl.isNotEmpty()) {
                     val coverImageUrl = buildCoverImageUrl(hostUrl, game.path_cover_small)
-                    Log.d("GameDetailsScreen", "Loading cover image from: $coverImageUrl")
-                    Log.d("GameDetailsScreen", "Cover path: ${game.path_cover_small}")
+                    AppLogger.d(tag = "GameDetailsScreen", message = "Loading cover image from: $coverImageUrl")
+                    AppLogger.d(tag = "GameDetailsScreen", message = "Cover path: ${game.path_cover_small}")
                     
                     var showError by remember(coverImageUrl) { mutableStateOf(false) }
                     var isLoading by remember(coverImageUrl) { mutableStateOf(true) }

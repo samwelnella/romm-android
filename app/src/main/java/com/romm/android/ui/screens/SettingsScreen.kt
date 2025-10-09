@@ -473,7 +473,7 @@ fun SettingsScreen(
                 )
 
                 Text(
-                    "Sync log level controls the verbosity of sync operation logs. INFO shows only important operations, DEBUG adds cache info, VERBOSE shows all details.",
+                    "App log level controls the verbosity of logs throughout the entire app (sync, downloads, API calls, etc.). INFO shows only important operations, DEBUG adds cache info, VERBOSE shows all details.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -495,10 +495,10 @@ fun SettingsScreen(
                     onExpandedChange = { expanded = !expanded }
                 ) {
                     OutlinedTextField(
-                        value = "${currentSettings.syncLogLevel} - ${logLevelDescriptions[currentSettings.syncLogLevel] ?: ""}",
+                        value = "${currentSettings.appLogLevel} - ${logLevelDescriptions[currentSettings.appLogLevel] ?: ""}",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Sync Log Level") },
+                        label = { Text("App Log Level") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                         modifier = Modifier
@@ -523,7 +523,7 @@ fun SettingsScreen(
                                     }
                                 },
                                 onClick = {
-                                    currentSettings = currentSettings.copy(syncLogLevel = level)
+                                    currentSettings = currentSettings.copy(appLogLevel = level)
                                     expanded = false
                                 },
                                 contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding

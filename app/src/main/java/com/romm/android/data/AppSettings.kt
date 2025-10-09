@@ -10,5 +10,5 @@ data class AppSettings(
     val saveStatesDirectory: String = "",
     val saveFileHistoryLimit: Int = 0, // 0 = no limit, 1-10 = max versions to keep
     val saveStateHistoryLimit: Int = 0, // 0 = no limit, 1-10 = max versions to keep
-    val syncLogLevel: String = "INFO" // VERBOSE, DEBUG, INFO, WARN, ERROR, NONE
+    val appLogLevel: String = "INFO" // VERBOSE, DEBUG, INFO, WARN, ERROR, NONE
 )

@@ -27,7 +27,7 @@ class SettingsRepository @Inject constructor(
         val SAVE_STATES_DIRECTORY = stringPreferencesKey("save_states_directory")
         val SAVE_FILE_HISTORY_LIMIT = intPreferencesKey("save_file_history_limit")
         val SAVE_STATE_HISTORY_LIMIT = intPreferencesKey("save_state_history_limit")
-        val SYNC_LOG_LEVEL = stringPreferencesKey("sync_log_level")
+        val APP_LOG_LEVEL = stringPreferencesKey("app_log_level")
     }
     
     val settings: Flow<AppSettings> = context.dataStore.data
@@ -42,7 +42,7 @@ class SettingsRepository @Inject constructor(
                 saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: "",
                 saveFileHistoryLimit = preferences[PreferencesKeys.SAVE_FILE_HISTORY_LIMIT] ?: 0,
                 saveStateHistoryLimit = preferences[PreferencesKeys.SAVE_STATE_HISTORY_LIMIT] ?: 0,
-                syncLogLevel = preferences[PreferencesKeys.SYNC_LOG_LEVEL] ?: "INFO"
+                appLogLevel = preferences[PreferencesKeys.APP_LOG_LEVEL] ?: "INFO"
             )
         }
     
@@ -57,7 +57,7 @@ class SettingsRepository @Inject constructor(
             preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] = settings.saveStatesDirectory
             preferences[PreferencesKeys.SAVE_FILE_HISTORY_LIMIT] = settings.saveFileHistoryLimit
             preferences[PreferencesKeys.SAVE_STATE_HISTORY_LIMIT] = settings.saveStateHistoryLimit
-            preferences[PreferencesKeys.SYNC_LOG_LEVEL] = settings.syncLogLevel
+            preferences[PreferencesKeys.APP_LOG_LEVEL] = settings.appLogLevel
         }
     }
     
@@ -73,7 +73,7 @@ class SettingsRepository @Inject constructor(
             saveStatesDirectory = preferences[PreferencesKeys.SAVE_STATES_DIRECTORY] ?: "",
             saveFileHistoryLimit = preferences[PreferencesKeys.SAVE_FILE_HISTORY_LIMIT] ?: 0,
             saveStateHistoryLimit = preferences[PreferencesKeys.SAVE_STATE_HISTORY_LIMIT] ?: 0,
-            syncLogLevel = preferences[PreferencesKeys.SYNC_LOG_LEVEL] ?: "INFO"
+            appLogLevel = preferences[PreferencesKeys.APP_LOG_LEVEL] ?: "INFO"
         )
     }
 }

@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -29,6 +28,7 @@ import com.romm.android.ui.screens.PlatformSaveStates
 import com.romm.android.ui.screens.GameWithSaves
 import com.romm.android.ui.screens.GameWithStates
 import com.romm.android.network.RomMApiService
+import com.romm.android.utils.AppLogger
 import com.romm.android.ui.theme.RomMTheme
 import com.romm.android.ui.components.*
 import com.romm.android.ui.screens.*
@@ -756,9 +756,9 @@ class MainViewModel @Inject constructor(
     }
     
     fun updateSettings(settings: AppSettings) {
-        Log.d("MainViewModel", "Updating settings: $settings")
-        Log.d("MainViewModel", "Save files directory: ${settings.saveFilesDirectory}")
-        Log.d("MainViewModel", "Save states directory: ${settings.saveStatesDirectory}")
+        AppLogger.d(tag = "MainViewModel", message = "Updating settings: $settings")
+        AppLogger.d(tag = "MainViewModel", message = "Save files directory: ${settings.saveFilesDirectory}")
+        AppLogger.d(tag = "MainViewModel", message = "Save states directory: ${settings.saveStatesDirectory}")
         viewModelScope.launch {
             try {
                 settingsRepository.updateSettings(settings)
@@ -782,7 +782,7 @@ class MainViewModel @Inject constructor(
                     loadPlatforms()
                 }
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to save settings", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to save settings", throwable = e)
                 _uiState.value = _uiState.value.copy(error = "Failed to save settings: ${e.message}")
             }
         }
@@ -821,7 +821,7 @@ class MainViewModel @Inject constructor(
                     onProgress = { progress ->
                         // Show progress in main UI
                         _uiState.value = _uiState.value.copy(syncProgress = progress)
-                        Log.d("MainViewModel", "Sync progress: ${progress.currentStep}")
+                        AppLogger.d(tag = "MainViewModel", message = "Sync progress: ${progress.currentStep}")
                     },
                     onComplete = { result ->
                         // Clear progress and show result
@@ -1009,9 +1009,9 @@ class MainViewModel @Inject constructor(
                     platforms = platforms,
                     isLoading = false
                 )
-                Log.d("MainViewModel", "Loaded ${platforms.size} platforms")
+                AppLogger.d(tag = "MainViewModel", message = "Loaded ${platforms.size} platforms")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load platforms", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load platforms", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load platforms: ${e.message}",
                     isLoading = false
@@ -1029,9 +1029,9 @@ class MainViewModel @Inject constructor(
                     collections = collections,
                     isLoading = false
                 )
-                Log.d("MainViewModel", "Loaded ${collections.size} collections")
+                AppLogger.d(tag = "MainViewModel", message = "Loaded ${collections.size} collections")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load collections", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load collections", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load collections: ${e.message}",
                     isLoading = false
@@ -1068,9 +1068,9 @@ class MainViewModel @Inject constructor(
                     isLoading = false,
                     loadingProgress = null
                 )
-                Log.d("MainViewModel", "Loaded ${games.size} games for platform $platformId")
+                AppLogger.d(tag = "MainViewModel", message = "Loaded ${games.size} games for platform $platformId")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load games for platform $platformId", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load games for platform $platformId", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load games: ${e.message}",
                     isLoading = false,
@@ -1108,9 +1108,9 @@ class MainViewModel @Inject constructor(
                     isLoading = false,
                     loadingProgress = null
                 )
-                Log.d("MainViewModel", "Loaded ${games.size} games for collection $collectionId")
+                AppLogger.d(tag = "MainViewModel", message = "Loaded ${games.size} games for collection $collectionId")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load games for collection $collectionId", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load games for collection $collectionId", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load games: ${e.message}",
                     isLoading = false,
@@ -1121,13 +1121,13 @@ class MainViewModel @Inject constructor(
     }
     
     fun downloadGame(game: Game) {
-        Log.d("MainViewModel", "Download requested for game: ${game.name ?: game.fs_name} (ID: ${game.id})")
+        AppLogger.d(tag = "MainViewModel", message = "Download requested for game: ${game.name ?: game.fs_name} (ID: ${game.id})")
         viewModelScope.launch {
             try {
                 downloadManager.downloadGame(game, _uiState.value.settings)
-                Log.d("MainViewModel", "Download manager called successfully")
+                AppLogger.d(tag = "MainViewModel", message = "Download manager called successfully")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Error starting download", e)
+                AppLogger.e(tag = "MainViewModel", message = "Error starting download", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to start download: ${e.message}"
                 )
@@ -1136,14 +1136,14 @@ class MainViewModel @Inject constructor(
     }
     
     fun downloadAllGames(platformId: Int?, collectionId: Int?) {
-        Log.d("MainViewModel", "Download all games requested - platform: $platformId, collection: $collectionId")
-        Log.d("MainViewModel", "Total games to download: ${_uiState.value.games.size}")
+        AppLogger.d(tag = "MainViewModel", message = "Download all games requested - platform: $platformId, collection: $collectionId")
+        AppLogger.d(tag = "MainViewModel", message = "Total games to download: ${_uiState.value.games.size}")
         viewModelScope.launch {
             try {
                 downloadManager.downloadAllGames(_uiState.value.games, _uiState.value.settings)
-                Log.d("MainViewModel", "Bulk download manager called successfully")
+                AppLogger.d(tag = "MainViewModel", message = "Bulk download manager called successfully")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Error starting bulk download", e)
+                AppLogger.e(tag = "MainViewModel", message = "Error starting bulk download", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to start bulk download: ${e.message}"
                 )
@@ -1153,13 +1153,13 @@ class MainViewModel @Inject constructor(
     
     fun downloadMissingGames(platformId: Int?, collectionId: Int?) {
         val allGames = _uiState.value.games
-        Log.d("MainViewModel", "Download missing games requested - checking ${allGames.size} total games")
+        AppLogger.d(tag = "MainViewModel", message = "Download missing games requested - checking ${allGames.size} total games")
         viewModelScope.launch {
             try {
                 downloadManager.downloadMissingGames(allGames, _uiState.value.settings)
-                Log.d("MainViewModel", "Missing games download manager called successfully")
+                AppLogger.d(tag = "MainViewModel", message = "Missing games download manager called successfully")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Error starting missing games download", e)
+                AppLogger.e(tag = "MainViewModel", message = "Error starting missing games download", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to start missing games download: ${e.message}"
                 )
@@ -1168,15 +1168,15 @@ class MainViewModel @Inject constructor(
     }
     
     fun downloadFirmware(platformId: Int) {
-        Log.d("MainViewModel", "Download firmware requested for platform: $platformId")
+        AppLogger.d(tag = "MainViewModel", message = "Download firmware requested for platform: $platformId")
         viewModelScope.launch {
             try {
                 val firmware = apiService.getFirmware(platformId)
-                Log.d("MainViewModel", "Found ${firmware.size} firmware files")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${firmware.size} firmware files")
                 downloadManager.downloadFirmware(firmware, _uiState.value.settings)
-                Log.d("MainViewModel", "Firmware download manager called successfully")
+                AppLogger.d(tag = "MainViewModel", message = "Firmware download manager called successfully")
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Error starting firmware download", e)
+                AppLogger.e(tag = "MainViewModel", message = "Error starting firmware download", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load firmware: ${e.message}"
                 )
@@ -1224,9 +1224,9 @@ class MainViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 // Try getting all saves first, then filter client-side
-                Log.d("MainViewModel", "Loading all save files to filter for platform ${platform.display_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Loading all save files to filter for platform ${platform.display_name}")
                 val allSaves = apiService.getSaves()
-                Log.d("MainViewModel", "Found ${allSaves.size} total save files")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${allSaves.size} total save files")
                 
                 // Filter saves by platform by checking each game's platform
                 val platformSaves = mutableListOf<SaveFile>()
@@ -1237,11 +1237,11 @@ class MainViewModel @Inject constructor(
                             platformSaves.add(save)
                         }
                     } catch (e: Exception) {
-                        Log.w("MainViewModel", "Failed to get game ${save.rom_id} for save ${save.id}", e)
+                        AppLogger.w(tag = "MainViewModel", message = "Failed to get game ${save.rom_id} for save ${save.id}", throwable = e)
                     }
                 }
                 
-                Log.d("MainViewModel", "Found ${platformSaves.size} save files for platform ${platform.display_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${platformSaves.size} save files for platform ${platform.display_name}")
                 
                 // Group saves by game
                 val savesByGame = platformSaves.groupBy { it.rom_id }
@@ -1252,7 +1252,7 @@ class MainViewModel @Inject constructor(
                         val game = apiService.getGame(romId)
                         gamesWithSaves.add(GameWithSaves(game, gameSaves))
                     } catch (e: Exception) {
-                        Log.w("MainViewModel", "Failed to get game $romId for saves", e)
+                        AppLogger.w(tag = "MainViewModel", message = "Failed to get game $romId for saves", throwable = e)
                     }
                 }
                 
@@ -1261,7 +1261,7 @@ class MainViewModel @Inject constructor(
                     isLoading = false
                 )
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load save files for platform", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load save files for platform", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load save files: ${e.message}"
@@ -1280,9 +1280,9 @@ class MainViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 // Try getting all states first, then filter client-side
-                Log.d("MainViewModel", "Loading all save states to filter for platform ${platform.display_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Loading all save states to filter for platform ${platform.display_name}")
                 val allStates = apiService.getStates()
-                Log.d("MainViewModel", "Found ${allStates.size} total save states")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${allStates.size} total save states")
                 
                 // Filter states by platform by checking each game's platform
                 val platformStates = mutableListOf<SaveState>()
@@ -1293,11 +1293,11 @@ class MainViewModel @Inject constructor(
                             platformStates.add(state)
                         }
                     } catch (e: Exception) {
-                        Log.w("MainViewModel", "Failed to get game ${state.rom_id} for state ${state.id}", e)
+                        AppLogger.w(tag = "MainViewModel", message = "Failed to get game ${state.rom_id} for state ${state.id}", throwable = e)
                     }
                 }
                 
-                Log.d("MainViewModel", "Found ${platformStates.size} save states for platform ${platform.display_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${platformStates.size} save states for platform ${platform.display_name}")
                 
                 // Group states by game
                 val statesByGame = platformStates.groupBy { it.rom_id }
@@ -1308,7 +1308,7 @@ class MainViewModel @Inject constructor(
                         val game = apiService.getGame(romId)
                         gamesWithStates.add(GameWithStates(game, gameStates))
                     } catch (e: Exception) {
-                        Log.w("MainViewModel", "Failed to get game $romId for states", e)
+                        AppLogger.w(tag = "MainViewModel", message = "Failed to get game $romId for states", throwable = e)
                     }
                 }
                 
@@ -1317,7 +1317,7 @@ class MainViewModel @Inject constructor(
                     isLoading = false
                 )
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load save states for platform", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load save states for platform", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load save states: ${e.message}"
@@ -1335,16 +1335,16 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                Log.d("MainViewModel", "Loading save states for game: ${game.name ?: game.fs_name_no_ext}")
+                AppLogger.d(tag = "MainViewModel", message = "Loading save states for game: ${game.name ?: game.fs_name_no_ext}")
                 val states = apiService.getStates(romId = game.id)
-                Log.d("MainViewModel", "Found ${states.size} save states for game")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${states.size} save states for game")
                 
                 _uiState.value = _uiState.value.copy(
                     gameStates = states,
                     isLoading = false
                 )
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load save states for game", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load save states for game", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load save states: ${e.message}"
@@ -1362,16 +1362,16 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                Log.d("MainViewModel", "Loading save files for game: ${game.name ?: game.fs_name_no_ext}")
+                AppLogger.d(tag = "MainViewModel", message = "Loading save files for game: ${game.name ?: game.fs_name_no_ext}")
                 val saves = apiService.getSaves(romId = game.id)
-                Log.d("MainViewModel", "Found ${saves.size} save files for game")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${saves.size} save files for game")
                 
                 _uiState.value = _uiState.value.copy(
                     gameSaves = saves,
                     isLoading = false
                 )
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load save files for game", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load save files for game", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load save files: ${e.message}"
@@ -1386,14 +1386,14 @@ class MainViewModel @Inject constructor(
             try {
                 val platforms = _uiState.value.platforms
                 if (platforms.isEmpty()) {
-                    Log.w("MainViewModel", "No platforms loaded, loading platforms first")
+                    AppLogger.w(tag = "MainViewModel", message = "No platforms loaded, loading platforms first")
                     loadPlatforms()
                     return@launch
                 }
                 
-                Log.d("MainViewModel", "Loading all save files")
+                AppLogger.d(tag = "MainViewModel", message = "Loading all save files")
                 val allSaves = apiService.getSaves()
-                Log.d("MainViewModel", "Found ${allSaves.size} total save files")
+                AppLogger.d(tag = "MainViewModel", message = "Found ${allSaves.size} total save files")
                 
                 if (allSaves.isNotEmpty()) {
                     // Group by platform by checking each game's platform
@@ -1402,13 +1402,13 @@ class MainViewModel @Inject constructor(
                             val game = apiService.getGame(save.rom_id)
                             platforms.find { it.slug == game.platform_slug }
                         } catch (e: Exception) {
-                            Log.w("MainViewModel", "Failed to get game ${save.rom_id} for save ${save.id}", e)
+                            AppLogger.w(tag = "MainViewModel", message = "Failed to get game ${save.rom_id} for save ${save.id}", throwable = e)
                             null
                         }
                     }.filterKeys { it != null }
                     
                     savesByPlatform.forEach { (platform, saves) ->
-                        Log.d("MainViewModel", "${platform?.display_name}: ${saves.size} save files")
+                        AppLogger.d(tag = "MainViewModel", message = "${platform?.display_name}: ${saves.size} save files")
                     }
                     
                     val platformSaveFiles = savesByPlatform.map { (platform, saves) ->
@@ -1426,7 +1426,7 @@ class MainViewModel @Inject constructor(
                         isLoading = false
                     )
                 } else {
-                    Log.d("MainViewModel", "No save files found")
+                    AppLogger.d(tag = "MainViewModel", message = "No save files found")
                     _uiState.value = _uiState.value.copy(
                         saveFiles = emptyList(),
                         saveFilesPlatforms = emptyList(),
@@ -1434,7 +1434,7 @@ class MainViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load save files", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load save files", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load save files: ${e.message}"
@@ -1448,7 +1448,7 @@ class MainViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 val platforms = _uiState.value.platforms
-                Log.d("MainViewModel", "Loading save states for ${platforms.size} platforms")
+                AppLogger.d(tag = "MainViewModel", message = "Loading save states for ${platforms.size} platforms")
                 
                 val allSaveStates = mutableListOf<SaveState>()
                 val saveStatesPlatforms = mutableListOf<PlatformSaveStates>()
@@ -1456,7 +1456,7 @@ class MainViewModel @Inject constructor(
                 // First try to get all save states without platform filtering
                 try {
                     val allStates = apiService.getStates()
-                    Log.d("MainViewModel", "Found ${allStates.size} total save states across all platforms")
+                    AppLogger.d(tag = "MainViewModel", message = "Found ${allStates.size} total save states across all platforms")
                     allSaveStates.addAll(allStates)
                     
                     if (allStates.isNotEmpty()) {
@@ -1467,14 +1467,14 @@ class MainViewModel @Inject constructor(
                                 val game = apiService.getGame(state.rom_id)
                                 platforms.find { it.slug == game.platform_slug }
                             } catch (e: Exception) {
-                                Log.w("MainViewModel", "Failed to get game ${state.rom_id} for state ${state.id}", e)
+                                AppLogger.w(tag = "MainViewModel", message = "Failed to get game ${state.rom_id} for state ${state.id}", throwable = e)
                                 null
                             }
                         }.filterKeys { it != null }
                         
                         statesByPlatform.forEach { (platform, states) ->
                             if (platform != null) {
-                                Log.d("MainViewModel", "Platform ${platform.display_name}: ${states.size} states")
+                                AppLogger.d(tag = "MainViewModel", message = "Platform ${platform.display_name}: ${states.size} states")
                                 saveStatesPlatforms.add(
                                     PlatformSaveStates(
                                         platform = platform,
@@ -1486,13 +1486,13 @@ class MainViewModel @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("MainViewModel", "Failed to load all save states, trying per-platform", e)
+                    AppLogger.e(tag = "MainViewModel", message = "Failed to load all save states, trying per-platform", throwable = e)
                     
                     // Fallback: Get save states for each platform individually
                     for (platform in platforms) {
                         try {
                             val platformStates = apiService.getStates(platformId = platform.id)
-                            Log.d("MainViewModel", "Platform ${platform.display_name}: ${platformStates.size} states")
+                            AppLogger.d(tag = "MainViewModel", message = "Platform ${platform.display_name}: ${platformStates.size} states")
                             if (platformStates.isNotEmpty()) {
                                 allSaveStates.addAll(platformStates)
                                 saveStatesPlatforms.add(
@@ -1504,12 +1504,12 @@ class MainViewModel @Inject constructor(
                                 )
                             }
                         } catch (e: Exception) {
-                            Log.w("MainViewModel", "Failed to load states for platform ${platform.display_name}", e)
+                            AppLogger.w(tag = "MainViewModel", message = "Failed to load states for platform ${platform.display_name}", throwable = e)
                         }
                     }
                 }
                 
-                Log.d("MainViewModel", "Final result: ${allSaveStates.size} total states, ${saveStatesPlatforms.size} platforms with states")
+                AppLogger.d(tag = "MainViewModel", message = "Final result: ${allSaveStates.size} total states, ${saveStatesPlatforms.size} platforms with states")
                 
                 _uiState.value = _uiState.value.copy(
                     saveStates = allSaveStates,
@@ -1517,7 +1517,7 @@ class MainViewModel @Inject constructor(
                     isLoading = false
                 )
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to load save states", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to load save states", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to load save states: ${e.message}",
                     isLoading = false
@@ -1537,11 +1537,11 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
                 val saveFiles = _uiState.value.saveFiles
-                Log.d("MainViewModel", "Starting download of ${saveFiles.size} save files")
-                Log.d("MainViewModel", "Save files directory: '${settings.saveFilesDirectory}'")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of ${saveFiles.size} save files")
+                AppLogger.d(tag = "MainViewModel", message = "Save files directory: '${settings.saveFilesDirectory}'")
                 downloadManager.downloadSaveFiles(saveFiles, settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download all save files", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download all save files", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to start save files download: ${e.message}"
                 )
@@ -1560,11 +1560,11 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
                 val saveStates = _uiState.value.saveStates
-                Log.d("MainViewModel", "Starting download of ${saveStates.size} save states")
-                Log.d("MainViewModel", "Save states directory: '${settings.saveStatesDirectory}'")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of ${saveStates.size} save states")
+                AppLogger.d(tag = "MainViewModel", message = "Save states directory: '${settings.saveStatesDirectory}'")
                 downloadManager.downloadSaveStates(saveStates, settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download all save states", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download all save states", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to start save states download: ${e.message}"
                 )
@@ -1583,10 +1583,10 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
                 val platformSaveFiles = _uiState.value.saveFilesForPlatform.flatMap { it.saves }
-                Log.d("MainViewModel", "Starting download of ${platformSaveFiles.size} save files for platform ${platform.display_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of ${platformSaveFiles.size} save files for platform ${platform.display_name}")
                 downloadManager.downloadSaveFiles(platformSaveFiles, settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download platform save files", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download platform save files", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to download save files: ${e.message}"
                 )
@@ -1605,10 +1605,10 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
                 val platformSaveStates = _uiState.value.saveStatesForPlatform.flatMap { it.states }
-                Log.d("MainViewModel", "Starting download of ${platformSaveStates.size} save states for platform ${platform.display_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of ${platformSaveStates.size} save states for platform ${platform.display_name}")
                 downloadManager.downloadSaveStates(platformSaveStates, settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download platform save states", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download platform save states", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to download save states: ${e.message}"
                 )
@@ -1627,10 +1627,10 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
                 val gameSaveFiles = _uiState.value.gameSaves
-                Log.d("MainViewModel", "Starting download of ${gameSaveFiles.size} save files for game ${game.name ?: game.fs_name_no_ext}")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of ${gameSaveFiles.size} save files for game ${game.name ?: game.fs_name_no_ext}")
                 downloadManager.downloadSaveFiles(gameSaveFiles, settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download game save files", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download game save files", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to download save files: ${e.message}"
                 )
@@ -1649,10 +1649,10 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
                 val gameSaveStates = _uiState.value.gameStates
-                Log.d("MainViewModel", "Starting download of ${gameSaveStates.size} save states for game ${game.name ?: game.fs_name_no_ext}")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of ${gameSaveStates.size} save states for game ${game.name ?: game.fs_name_no_ext}")
                 downloadManager.downloadSaveStates(gameSaveStates, settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download game save states", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download game save states", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to download save states: ${e.message}"
                 )
@@ -1670,11 +1670,11 @@ class MainViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                Log.d("MainViewModel", "Starting download of save file: ${saveFile.file_name}")
-                Log.d("MainViewModel", "Save files directory: '${settings.saveFilesDirectory}'")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of save file: ${saveFile.file_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Save files directory: '${settings.saveFilesDirectory}'")
                 downloadManager.downloadSaveFiles(listOf(saveFile), settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download save file", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download save file", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to download save file: ${e.message}"
                 )
@@ -1692,11 +1692,11 @@ class MainViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                Log.d("MainViewModel", "Starting download of save state: ${saveState.file_name}")
-                Log.d("MainViewModel", "Save states directory: '${settings.saveStatesDirectory}'")
+                AppLogger.d(tag = "MainViewModel", message = "Starting download of save state: ${saveState.file_name}")
+                AppLogger.d(tag = "MainViewModel", message = "Save states directory: '${settings.saveStatesDirectory}'")
                 downloadManager.downloadSaveStates(listOf(saveState), settings)
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Failed to download save state", e)
+                AppLogger.e(tag = "MainViewModel", message = "Failed to download save state", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to download save state: ${e.message}"
                 )

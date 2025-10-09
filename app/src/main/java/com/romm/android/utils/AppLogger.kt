@@ -3,12 +3,12 @@ package com.romm.android.utils
 import android.util.Log
 
 /**
- * Centralized logging utility for sync operations with configurable log levels.
+ * Centralized logging utility for the entire app with configurable log levels.
  *
  * This allows for detailed debug logging during development/troubleshooting,
  * while keeping production logs clean and focused on important events.
  */
-object SyncLogger {
+object AppLogger {
 
     enum class LogLevel {
         VERBOSE,  // Everything including detailed trace info

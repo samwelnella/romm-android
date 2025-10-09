@@ -3,7 +3,6 @@ package com.romm.android.sync
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -24,7 +23,7 @@ import com.romm.android.data.SettingsRepository
 import com.romm.android.network.RomMApiService
 import com.romm.android.ui.theme.RomMTheme
 import com.romm.android.utils.DownloadManager
-import com.romm.android.utils.SyncLogger
+import com.romm.android.utils.AppLogger
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +42,7 @@ class SyncActivity : ComponentActivity() {
         
         // Parse intent parameters
         val syncRequest = parseSyncIntent(intent)
-        Log.d("SyncActivity", "Sync request: $syncRequest")
+        AppLogger.d(tag = "SyncActivity", message = "Sync request: $syncRequest")
         
         setContent {
             RomMTheme {
@@ -149,7 +148,7 @@ class SyncViewModel @Inject constructor(
                 val settings = settingsRepository.getCurrentSettings()
 
                 // Apply log level from settings
-                SyncLogger.setLevelFromString(settings.syncLogLevel)
+                AppLogger.setLevelFromString(settings.appLogLevel)
 
                 // Validate settings
                 if (settings.host.isEmpty()) {
@@ -215,7 +214,7 @@ class SyncViewModel @Inject constructor(
                 }
                 
             } catch (e: Exception) {
-                Log.e("SyncViewModel", "Sync failed", e)
+                AppLogger.e(tag = "SyncViewModel", message = "Sync failed", throwable = e)
                 _uiState.value = _uiState.value.copy(
                     error = "Sync failed: ${e.message}",
                     isScanning = false

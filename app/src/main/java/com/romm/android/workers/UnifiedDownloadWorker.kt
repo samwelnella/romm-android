@@ -2,12 +2,12 @@ package com.romm.android.workers
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.*
 import androidx.hilt.work.HiltWorker
 import com.romm.android.network.RomMApiService
+import com.romm.android.utils.AppLogger
 import com.romm.android.utils.DownloadManager
 import com.romm.android.utils.PlatformMapper
 import dagger.assisted.Assisted
@@ -40,7 +40,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         private fun getSemaphoreForSession(sessionId: String, maxConcurrent: Int): Semaphore {
             val key = "${sessionId}_$maxConcurrent"
             return semaphoreMap.getOrPut(key) {
-                Log.d("UnifiedDownloadWorker", "Creating semaphore for session $sessionId with limit $maxConcurrent")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Creating semaphore for session $sessionId with limit $maxConcurrent")
                 Semaphore(maxConcurrent)
             }
         }
@@ -59,21 +59,21 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val sessionId = inputData.getString("sessionId") ?: return Result.failure()
         val maxConcurrent = inputData.getInt("maxConcurrentDownloads", 1)
         
-        Log.d("UnifiedDownloadWorker", "=== FOREGROUND DOWNLOAD STARTED ===")
-        Log.d("UnifiedDownloadWorker", "Worker ID: ${this.id}")
-        Log.d("UnifiedDownloadWorker", "Download ID: $downloadId")
-        Log.d("UnifiedDownloadWorker", "Name: $downloadName")
-        Log.d("UnifiedDownloadWorker", "Type: $downloadType")
-        Log.d("UnifiedDownloadWorker", "Session: $sessionId")
-        Log.d("UnifiedDownloadWorker", "Max Concurrent: $maxConcurrent")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "=== FOREGROUND DOWNLOAD STARTED ===")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "Worker ID: ${this.id}")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "Download ID: $downloadId")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "Name: $downloadName")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "Type: $downloadType")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "Session: $sessionId")
+        AppLogger.i(tag = "UnifiedDownloadWorker", message = "Max Concurrent: $maxConcurrent")
         
         return try {
             // Use semaphore to control concurrency
             val semaphore = getSemaphoreForSession(sessionId, maxConcurrent)
-            Log.d("UnifiedDownloadWorker", "Waiting for download slot ($maxConcurrent max concurrent)")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Waiting for download slot ($maxConcurrent max concurrent)")
             
             semaphore.withPermit {
-                Log.d("UnifiedDownloadWorker", "Acquired download slot - starting download: $downloadName")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Acquired download slot - starting download: $downloadName")
                 
                 // Set foreground service ONLY after acquiring download slot
                 setForeground(createActiveForegroundInfo(downloadName, 0))
@@ -86,11 +86,11 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 }
             }
         } catch (e: OutOfMemoryError) {
-            Log.e("UnifiedDownloadWorker", "=== DOWNLOAD FAILED (OOM) === $downloadName", e)
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "=== DOWNLOAD FAILED (OOM) === $downloadName", throwable = e)
             System.gc()
             Result.failure()
         } catch (e: Exception) {
-            Log.e("UnifiedDownloadWorker", "=== DOWNLOAD FAILED (Exception) === $downloadName", e)
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "=== DOWNLOAD FAILED (Exception) === $downloadName", throwable = e)
             Result.failure()
         }
     }
@@ -105,36 +105,36 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val downloadName = inputData.getString("downloadName") ?: return Result.failure()
         val downloadDirectoryUri = inputData.getString("downloadDirectory") ?: return Result.failure()
         
-        Log.d("UnifiedDownloadWorker", "Downloading game: $downloadName (ID: $gameId, Multi: $isMulti)")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Downloading game: $downloadName (ID: $gameId, Multi: $isMulti)")
         
         // Get detailed game info
         val game = apiService.getGame(gameId)
-        Log.d("UnifiedDownloadWorker", "Got game details: ${game.fs_name}")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Got game details: ${game.fs_name}")
         
         // Get base directory
         val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(downloadDirectoryUri))
         if (baseDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not access base directory: $downloadDirectoryUri")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not access base directory: $downloadDirectoryUri")
             return Result.failure()
         }
         
         // Get or create platform directory using ES-DE mapping if available
         val folderName = PlatformMapper.getEsdeFolderName(platformSlug)
-        Log.d("UnifiedDownloadWorker", "Platform mapping: $platformSlug -> $folderName")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Platform mapping: $platformSlug -> $folderName")
         val platformDir = getOrCreatePlatformDirectory(baseDir, folderName)
         if (platformDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not create platform directory: $platformSlug")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create platform directory: $platformSlug")
             return Result.failure()
         }
         
         // Prepare download
         val fileName = if (isMulti) "${game.fs_name_no_ext}.zip" else game.fs_name
-        Log.d("UnifiedDownloadWorker", "Downloading file: $fileName")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Downloading file: $fileName")
         
         val response = apiService.downloadGame(gameId, fileName)
         
         if (!response.isSuccessful) {
-            Log.e("UnifiedDownloadWorker", "Download failed with response code: ${response.code()}")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Download failed with response code: ${response.code()}")
             return Result.failure()
         }
         
@@ -143,7 +143,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 // For multi-disc games, create/replace directory
                 val existingDir = platformDir.findFile(game.fs_name_no_ext)
                 if (existingDir != null && existingDir.isDirectory) {
-                    Log.d("UnifiedDownloadWorker", "Deleting existing multi-disc directory: ${existingDir.name}")
+                    AppLogger.d(tag = "UnifiedDownloadWorker", message = "Deleting existing multi-disc directory: ${existingDir.name}")
                     deleteDirectoryRecursively(existingDir)
                 }
                 platformDir.createDirectory(game.fs_name_no_ext)
@@ -152,18 +152,18 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             }
             
             if (targetDir == null) {
-                Log.e("UnifiedDownloadWorker", "Could not create target directory")
+                AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create target directory")
                 return Result.failure()
             }
             
             // Create/overwrite the file
             val outputFile = createOrReplaceFile(targetDir, fileName)
             if (outputFile == null) {
-                Log.e("UnifiedDownloadWorker", "Could not create output file: $fileName")
+                AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create output file: $fileName")
                 return Result.failure()
             }
             
-            Log.d("UnifiedDownloadWorker", "Created output file: ${outputFile.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Created output file: ${outputFile.name}")
             
             // Download with foreground progress updates
             downloadFileWithForegroundUpdates(body, outputFile, downloadName) { progress ->
@@ -172,14 +172,14 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             
             // Extract ZIP if needed
             if (isMulti && fileName.endsWith(".zip")) {
-                Log.d("UnifiedDownloadWorker", "Extracting ZIP file")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Extracting ZIP file")
                 setForeground(createActiveForegroundInfo("$downloadName (Extracting...)", 100))
                 extractZipFile(outputFile, targetDir)
                 outputFile.delete() // Remove ZIP after extraction
-                Log.d("UnifiedDownloadWorker", "ZIP extraction complete")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "ZIP extraction complete")
             }
             
-            Log.d("UnifiedDownloadWorker", "=== DOWNLOAD SUCCESS === $downloadName")
+            AppLogger.i(tag = "UnifiedDownloadWorker", message = "=== DOWNLOAD SUCCESS === $downloadName")
             return Result.success()
         }
         
@@ -195,19 +195,19 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val downloadName = inputData.getString("downloadName") ?: return Result.failure()
         val downloadDirectoryUri = inputData.getString("downloadDirectory") ?: return Result.failure()
         
-        Log.d("UnifiedDownloadWorker", "Downloading firmware: $fileName (ID: $firmwareId)")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Downloading firmware: $fileName (ID: $firmwareId)")
         
         // Get base directory
         val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(downloadDirectoryUri))
         if (baseDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not access base directory: $downloadDirectoryUri")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not access base directory: $downloadDirectoryUri")
             return Result.failure()
         }
         
         // Get or create firmware directory
         val firmwareDir = getOrCreateFirmwareDirectory(baseDir)
         if (firmwareDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not create firmware directory")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create firmware directory")
             return Result.failure()
         }
         
@@ -215,7 +215,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val response = apiService.downloadFirmware(firmwareId, fileName)
         
         if (!response.isSuccessful) {
-            Log.e("UnifiedDownloadWorker", "Firmware download failed with response code: ${response.code()}")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Firmware download failed with response code: ${response.code()}")
             return Result.failure()
         }
         
@@ -223,7 +223,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             // Create/overwrite the file
             val outputFile = createOrReplaceFile(firmwareDir, fileName)
             if (outputFile == null) {
-                Log.e("UnifiedDownloadWorker", "Could not create firmware output file: $fileName")
+                AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create firmware output file: $fileName")
                 return Result.failure()
             }
             
@@ -232,7 +232,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 setProgress(workDataOf("progress" to progress))
             }
             
-            Log.d("UnifiedDownloadWorker", "=== FIRMWARE DOWNLOAD SUCCESS === $fileName")
+            AppLogger.i(tag = "UnifiedDownloadWorker", message = "=== FIRMWARE DOWNLOAD SUCCESS === $fileName")
             return Result.success()
         }
         
@@ -286,11 +286,11 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         var downloadedBytes = 0L
         var lastProgressUpdate = 0
         
-        Log.d("UnifiedDownloadWorker", "Starting download, content length: $contentLength")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Starting download, content length: $contentLength")
         
         val outputStream = applicationContext.contentResolver.openOutputStream(outputFile.uri)
         if (outputStream == null) {
-            Log.e("UnifiedDownloadWorker", "Could not open output stream for file: ${outputFile.name}")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not open output stream for file: ${outputFile.name}")
             throw IOException("Could not open output stream")
         }
         
@@ -318,7 +318,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                                 // Flush buffer periodically
                                 output.flush()
                                 
-                                Log.d("UnifiedDownloadWorker", "Download progress: $progress% ($downloadedBytes/$contentLength bytes)")
+                                AppLogger.v(tag = "UnifiedDownloadWorker", message = "Download progress: $progress% ($downloadedBytes/$contentLength bytes)")
                             }
                         }
                     }
@@ -331,7 +331,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             outputStream.close()
         }
         
-        Log.d("UnifiedDownloadWorker", "Download completed, bytes written: $downloadedBytes")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Download completed, bytes written: $downloadedBytes")
     }
     
     /**
@@ -343,24 +343,24 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             // Always check for existing directory first
             val existingDir = findAnyPlatformDirectory(baseDir, platformSlug)
             if (existingDir != null) {
-                Log.d("UnifiedDownloadWorker", "Using existing platform directory: ${existingDir.name}")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Using existing platform directory: ${existingDir.name}")
                 return existingDir
             }
             
             // Try to create new directory
-            Log.d("UnifiedDownloadWorker", "Attempt ${attempt + 1}: Creating platform directory: $platformSlug")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Attempt ${attempt + 1}: Creating platform directory: $platformSlug")
             try {
                 val newDir = baseDir.createDirectory(platformSlug)
                 if (newDir != null && newDir.name == platformSlug) {
-                    Log.d("UnifiedDownloadWorker", "Successfully created platform directory: ${newDir.name}")
+                    AppLogger.d(tag = "UnifiedDownloadWorker", message = "Successfully created platform directory: ${newDir.name}")
                     return newDir
                 } else if (newDir != null) {
                     // Android created a numbered variant - delete it and try again
-                    Log.w("UnifiedDownloadWorker", "Android created numbered variant: ${newDir.name}, deleting and retrying")
+                    AppLogger.w(tag = "UnifiedDownloadWorker", message = "Android created numbered variant: ${newDir.name}, deleting and retrying")
                     newDir.delete()
                 }
             } catch (e: Exception) {
-                Log.w("UnifiedDownloadWorker", "Directory creation attempt ${attempt + 1} failed", e)
+                AppLogger.w(tag = "UnifiedDownloadWorker", message = "Directory creation attempt ${attempt + 1} failed", throwable = e)
             }
             
             // Small delay before retry to avoid tight loop
@@ -370,13 +370,13 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         // Final attempt: check one more time if another worker created it
         val finalCheck = findAnyPlatformDirectory(baseDir, platformSlug)
         if (finalCheck != null) {
-            Log.d("UnifiedDownloadWorker", "Found directory created by another worker: ${finalCheck.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Found directory created by another worker: ${finalCheck.name}")
             // Clean up any numbered variants that might have been created accidentally
             cleanupNumberedVariants(baseDir, platformSlug)
             return finalCheck
         }
         
-        Log.e("UnifiedDownloadWorker", "Failed to create or find platform directory after 5 attempts: $platformSlug")
+        AppLogger.e(tag = "UnifiedDownloadWorker", message = "Failed to create or find platform directory after 5 attempts: $platformSlug")
         return null
     }
     
@@ -391,7 +391,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                     val name = file.name ?: return@forEach
                     val regex = Regex("^${Regex.escape(platformSlug)}\\s*\\(\\d+\\)$")
                     if (regex.matches(name)) {
-                        Log.d("UnifiedDownloadWorker", "Cleaning up numbered variant directory: $name")
+                        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Cleaning up numbered variant directory: $name")
                         // Move contents to the main directory if it has any files
                         val mainDir = findAnyPlatformDirectory(baseDir, platformSlug)
                         if (mainDir != null) {
@@ -402,7 +402,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.w("UnifiedDownloadWorker", "Error cleaning up numbered variants", e)
+            AppLogger.w(tag = "UnifiedDownloadWorker", message = "Error cleaning up numbered variants", throwable = e)
         }
     }
     
@@ -417,7 +417,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                     val existingFile = destDir.findFile(file.name ?: "")
                     if (existingFile == null) {
                         // File doesn't exist in destination, we could move it but for safety we'll just delete the duplicate
-                        Log.d("UnifiedDownloadWorker", "Removing duplicate file from numbered variant: ${file.name}")
+                        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Removing duplicate file from numbered variant: ${file.name}")
                         file.delete()
                     } else {
                         // File already exists, delete the duplicate
@@ -426,7 +426,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.w("UnifiedDownloadWorker", "Error moving directory contents", e)
+            AppLogger.w(tag = "UnifiedDownloadWorker", message = "Error moving directory contents", throwable = e)
         }
     }
     
@@ -437,7 +437,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val files = try {
             baseDir.listFiles()
         } catch (e: Exception) {
-            Log.e("UnifiedDownloadWorker", "Error listing directory files", e)
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Error listing directory files", throwable = e)
             emptyArray()
         }
         
@@ -458,27 +458,27 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         // Try to find existing firmware directory
         val existingDir = findAnyFirmwareDirectory(baseDir)
         if (existingDir != null) {
-            Log.d("UnifiedDownloadWorker", "Using existing firmware directory: ${existingDir.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Using existing firmware directory: ${existingDir.name}")
             return existingDir
         }
         
         // Create new firmware directory
-        Log.d("UnifiedDownloadWorker", "Creating firmware directory")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Creating firmware directory")
         val newDir = baseDir.createDirectory("firmware")
         
         if (newDir != null) {
-            Log.d("UnifiedDownloadWorker", "Successfully created firmware directory: ${newDir.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Successfully created firmware directory: ${newDir.name}")
             return newDir
         }
         
         // Creation failed, try to find it again
         val retryDir = findAnyFirmwareDirectory(baseDir)
         if (retryDir != null) {
-            Log.d("UnifiedDownloadWorker", "Found firmware directory created by another worker: ${retryDir.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Found firmware directory created by another worker: ${retryDir.name}")
             return retryDir
         }
         
-        Log.e("UnifiedDownloadWorker", "Failed to create or find firmware directory")
+        AppLogger.e(tag = "UnifiedDownloadWorker", message = "Failed to create or find firmware directory")
         return null
     }
     
@@ -489,7 +489,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val files = try {
             baseDir.listFiles()
         } catch (e: Exception) {
-            Log.e("UnifiedDownloadWorker", "Error listing directory files", e)
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Error listing directory files", throwable = e)
             emptyArray()
         }
         
@@ -521,7 +521,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         // Delete existing file with same name
         val existingFile = directory.findFile(fileName)
         if (existingFile != null && existingFile.isFile) {
-            Log.d("UnifiedDownloadWorker", "Deleting existing file: ${existingFile.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Deleting existing file: ${existingFile.name}")
             existingFile.delete()
         }
         
@@ -536,7 +536,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 
                 val regex = Regex("^${Regex.escape(fileNameWithoutExt)}\\s*\\(\\d+\\)$")
                 if (regex.matches(nameWithoutExt)) {
-                    Log.d("UnifiedDownloadWorker", "Deleting duplicate file: ${file.name}")
+                    AppLogger.d(tag = "UnifiedDownloadWorker", message = "Deleting duplicate file: ${file.name}")
                     file.delete()
                 }
             }
@@ -550,7 +550,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
      * Extract ZIP file preserving directory structure
      */
     private suspend fun extractZipFile(zipFile: DocumentFile, destinationDir: DocumentFile) = withContext(Dispatchers.IO) {
-        Log.d("UnifiedDownloadWorker", "Starting ZIP extraction")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Starting ZIP extraction")
         
         val inputStream = applicationContext.contentResolver.openInputStream(zipFile.uri)
             ?: return@withContext
@@ -562,7 +562,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                     
                     while (entry != null) {
                         val entryName = entry.name
-                        Log.d("UnifiedDownloadWorker", "Processing ZIP entry: $entryName")
+                        AppLogger.v(tag = "UnifiedDownloadWorker", message = "Processing ZIP entry: $entryName")
                         
                         if (entry.isDirectory) {
                             // Create directory structure
@@ -585,7 +585,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                                         bufferedOutput.flush()
                                     }
                                 }
-                                Log.d("UnifiedDownloadWorker", "Extracted file: $entryName")
+                                AppLogger.v(tag = "UnifiedDownloadWorker", message = "Extracted file: $entryName")
                             }
                         }
                         
@@ -598,7 +598,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             inputStream.close()
         }
         
-        Log.d("UnifiedDownloadWorker", "ZIP extraction completed")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "ZIP extraction completed")
     }
     
     /**
@@ -676,12 +676,12 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val downloadName = inputData.getString("downloadName") ?: return Result.failure()
         val saveFilesDirectoryUri = inputData.getString("saveFilesDirectory") ?: return Result.failure()
         
-        Log.d("UnifiedDownloadWorker", "Downloading save file: $downloadName (ID: $saveId)")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Downloading save file: $downloadName (ID: $saveId)")
         
         // Get base directory
         val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(saveFilesDirectoryUri))
         if (baseDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not access save files directory: $saveFilesDirectoryUri")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not access save files directory: $saveFilesDirectoryUri")
             return Result.failure()
         }
         
@@ -696,14 +696,14 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         // Get or create platform directory
         val platformDir = getOrCreateSaveDirectory(baseDir, platformFolderName)
         if (platformDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not create platform directory: $platformFolderName")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create platform directory: $platformFolderName")
             return Result.failure()
         }
         
         // Get or create emulator directory
         val emulatorDir = getOrCreateSaveDirectory(platformDir, emulatorFolderName)
         if (emulatorDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not create emulator directory: $emulatorFolderName")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create emulator directory: $emulatorFolderName")
             return Result.failure()
         }
         
@@ -712,20 +712,20 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val response = apiService.downloadSaveFile(saveFile)
         
         if (!response.isSuccessful) {
-            Log.e("UnifiedDownloadWorker", "Save file download failed with response code: ${response.code()}")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Save file download failed with response code: ${response.code()}")
             return Result.failure()
         }
         
         response.body()?.let { body ->
             // Strip timestamp from filename before saving locally
             val localFileName = stripTimestampFromFilename(fileName)
-            Log.d("UnifiedDownloadWorker", "Original filename: $fileName")
-            Log.d("UnifiedDownloadWorker", "Local filename: $localFileName")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Original filename: $fileName")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Local filename: $localFileName")
             
             // Create/overwrite the file
             val outputFile = createOrReplaceFile(emulatorDir, localFileName)
             if (outputFile == null) {
-                Log.e("UnifiedDownloadWorker", "Could not create save file output: $fileName")
+                AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create save file output: $fileName")
                 return Result.failure()
             }
             
@@ -734,7 +734,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 setProgress(workDataOf("progress" to progress))
             }
             
-            Log.d("UnifiedDownloadWorker", "=== SAVE FILE DOWNLOAD SUCCESS === $fileName")
+            AppLogger.i(tag = "UnifiedDownloadWorker", message = "=== SAVE FILE DOWNLOAD SUCCESS === $fileName")
             return Result.success()
         }
         
@@ -752,12 +752,12 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val downloadName = inputData.getString("downloadName") ?: return Result.failure()
         val saveStatesDirectoryUri = inputData.getString("saveStatesDirectory") ?: return Result.failure()
         
-        Log.d("UnifiedDownloadWorker", "Downloading save state: $downloadName (ID: $stateId)")
+        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Downloading save state: $downloadName (ID: $stateId)")
         
         // Get base directory
         val baseDir = DocumentFile.fromTreeUri(applicationContext, Uri.parse(saveStatesDirectoryUri))
         if (baseDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not access save states directory: $saveStatesDirectoryUri")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not access save states directory: $saveStatesDirectoryUri")
             return Result.failure()
         }
         
@@ -772,14 +772,14 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         // Get or create platform directory
         val platformDir = getOrCreateSaveDirectory(baseDir, platformFolderName)
         if (platformDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not create platform directory: $platformFolderName")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create platform directory: $platformFolderName")
             return Result.failure()
         }
         
         // Get or create emulator directory
         val emulatorDir = getOrCreateSaveDirectory(platformDir, emulatorFolderName)
         if (emulatorDir == null) {
-            Log.e("UnifiedDownloadWorker", "Could not create emulator directory: $emulatorFolderName")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create emulator directory: $emulatorFolderName")
             return Result.failure()
         }
         
@@ -788,20 +788,20 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val response = apiService.downloadSaveState(saveState)
         
         if (!response.isSuccessful) {
-            Log.e("UnifiedDownloadWorker", "Save state download failed with response code: ${response.code()}")
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Save state download failed with response code: ${response.code()}")
             return Result.failure()
         }
         
         response.body()?.let { body ->
             // Strip timestamp from filename before saving locally
             val localFileName = stripTimestampFromFilename(fileName)
-            Log.d("UnifiedDownloadWorker", "Original filename: $fileName")
-            Log.d("UnifiedDownloadWorker", "Local filename: $localFileName")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Original filename: $fileName")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Local filename: $localFileName")
             
             // Create/overwrite the file
             val outputFile = createOrReplaceFile(emulatorDir, localFileName)
             if (outputFile == null) {
-                Log.e("UnifiedDownloadWorker", "Could not create save state output: $fileName")
+                AppLogger.e(tag = "UnifiedDownloadWorker", message = "Could not create save state output: $fileName")
                 return Result.failure()
             }
             
@@ -810,16 +810,16 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 setProgress(workDataOf("progress" to progress))
             }
             
-            Log.d("UnifiedDownloadWorker", "=== SAVE STATE DOWNLOAD SUCCESS === $fileName")
+            AppLogger.i(tag = "UnifiedDownloadWorker", message = "=== SAVE STATE DOWNLOAD SUCCESS === $fileName")
             
             // After successfully downloading the save state, check for and download associated screenshot
             try {
-                Log.d("UnifiedDownloadWorker", "Checking for associated screenshot in save state data")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Checking for associated screenshot in save state data")
                 
                 // Check if save state has an associated screenshot directly in the response
                 if (saveState.screenshot != null) {
                     val screenshot = saveState.screenshot!!
-                    Log.d("UnifiedDownloadWorker", "Found screenshot in save state: ${screenshot.file_name}")
+                    AppLogger.d(tag = "UnifiedDownloadWorker", message = "Found screenshot in save state: ${screenshot.file_name}")
                     
                     val screenshotResponse = apiService.downloadScreenshot(screenshot)
                     if (screenshotResponse.isSuccessful) {
@@ -829,23 +829,23 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                             
                             val screenshotFile = createOrReplaceFile(emulatorDir, screenshotFileName)
                             if (screenshotFile != null) {
-                                Log.d("UnifiedDownloadWorker", "Downloading screenshot as: $screenshotFileName")
+                                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Downloading screenshot as: $screenshotFileName")
                                 downloadFileWithForegroundUpdates(screenshotBody, screenshotFile, "Screenshot") { progress ->
                                     // Don't update main progress for screenshot, just log
                                 }
-                                Log.d("UnifiedDownloadWorker", "=== SCREENSHOT DOWNLOAD SUCCESS === $screenshotFileName")
+                                AppLogger.i(tag = "UnifiedDownloadWorker", message = "=== SCREENSHOT DOWNLOAD SUCCESS === $screenshotFileName")
                             } else {
-                                Log.w("UnifiedDownloadWorker", "Could not create screenshot file: $screenshotFileName")
+                                AppLogger.w(tag = "UnifiedDownloadWorker", message = "Could not create screenshot file: $screenshotFileName")
                             }
                         }
                     } else {
-                        Log.w("UnifiedDownloadWorker", "Screenshot download failed with response code: ${screenshotResponse.code()}")
+                        AppLogger.w(tag = "UnifiedDownloadWorker", message = "Screenshot download failed with response code: ${screenshotResponse.code()}")
                     }
                 } else {
-                    Log.d("UnifiedDownloadWorker", "No screenshot associated with save state: $stateId")
+                    AppLogger.d(tag = "UnifiedDownloadWorker", message = "No screenshot associated with save state: $stateId")
                 }
             } catch (e: Exception) {
-                Log.w("UnifiedDownloadWorker", "Error downloading screenshot for save state $stateId", e)
+                AppLogger.w(tag = "UnifiedDownloadWorker", message = "Error downloading screenshot for save state $stateId", throwable = e)
                 // Don't fail the entire operation if screenshot download fails
             }
             
@@ -864,24 +864,24 @@ class UnifiedDownloadWorker @AssistedInject constructor(
             // Always check for existing directory first
             val existingDir = findAnySaveDirectory(baseDir, dirName)
             if (existingDir != null) {
-                Log.d("UnifiedDownloadWorker", "Using existing save directory: ${existingDir.name}")
+                AppLogger.d(tag = "UnifiedDownloadWorker", message = "Using existing save directory: ${existingDir.name}")
                 return existingDir
             }
             
             // Try to create new directory
-            Log.d("UnifiedDownloadWorker", "Attempt ${attempt + 1}: Creating save directory: $dirName")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Attempt ${attempt + 1}: Creating save directory: $dirName")
             try {
                 val newDir = baseDir.createDirectory(dirName)
                 if (newDir != null && newDir.name == dirName) {
-                    Log.d("UnifiedDownloadWorker", "Successfully created save directory: ${newDir.name}")
+                    AppLogger.d(tag = "UnifiedDownloadWorker", message = "Successfully created save directory: ${newDir.name}")
                     return newDir
                 } else if (newDir != null) {
                     // Android created a numbered variant - delete it and try again
-                    Log.w("UnifiedDownloadWorker", "Android created numbered variant: ${newDir.name}, deleting and retrying")
+                    AppLogger.w(tag = "UnifiedDownloadWorker", message = "Android created numbered variant: ${newDir.name}, deleting and retrying")
                     newDir.delete()
                 }
             } catch (e: Exception) {
-                Log.w("UnifiedDownloadWorker", "Save directory creation attempt ${attempt + 1} failed", e)
+                AppLogger.w(tag = "UnifiedDownloadWorker", message = "Save directory creation attempt ${attempt + 1} failed", throwable = e)
             }
             
             // Small delay before retry to avoid tight loop
@@ -891,13 +891,13 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         // Final attempt: check one more time if another worker created it
         val finalCheck = findAnySaveDirectory(baseDir, dirName)
         if (finalCheck != null) {
-            Log.d("UnifiedDownloadWorker", "Found save directory created by another worker: ${finalCheck.name}")
+            AppLogger.d(tag = "UnifiedDownloadWorker", message = "Found save directory created by another worker: ${finalCheck.name}")
             // Clean up any numbered variants that might have been created accidentally
             cleanupNumberedSaveVariants(baseDir, dirName)
             return finalCheck
         }
         
-        Log.e("UnifiedDownloadWorker", "Failed to create or find save directory after 5 attempts: $dirName")
+        AppLogger.e(tag = "UnifiedDownloadWorker", message = "Failed to create or find save directory after 5 attempts: $dirName")
         return null
     }
     
@@ -908,7 +908,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
         val files = try {
             baseDir.listFiles()
         } catch (e: Exception) {
-            Log.e("UnifiedDownloadWorker", "Error listing save directory files", e)
+            AppLogger.e(tag = "UnifiedDownloadWorker", message = "Error listing save directory files", throwable = e)
             emptyArray()
         }
         
@@ -933,7 +933,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                     val name = file.name ?: return@forEach
                     val regex = Regex("^${Regex.escape(dirName)}\\s*\\(\\d+\\)$")
                     if (regex.matches(name)) {
-                        Log.d("UnifiedDownloadWorker", "Cleaning up numbered variant save directory: $name")
+                        AppLogger.d(tag = "UnifiedDownloadWorker", message = "Cleaning up numbered variant save directory: $name")
                         // Move contents to the main directory if it has any files
                         val mainDir = findAnySaveDirectory(baseDir, dirName)
                         if (mainDir != null) {
@@ -944,7 +944,7 @@ class UnifiedDownloadWorker @AssistedInject constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.w("UnifiedDownloadWorker", "Error cleaning up numbered save variants", e)
+            AppLogger.w(tag = "UnifiedDownloadWorker", message = "Error cleaning up numbered save variants", throwable = e)
         }
     }
     

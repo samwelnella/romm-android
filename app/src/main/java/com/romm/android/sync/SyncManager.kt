@@ -1,14 +1,13 @@
 package com.romm.android.sync
 
 import android.content.Context
-import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.romm.android.data.*
 import com.romm.android.network.RomMApiService
 import com.romm.android.utils.DownloadManager
 import com.romm.android.utils.LegacyPlatformSlugMapper
 import com.romm.android.utils.PlatformMapper
-import com.romm.android.utils.SyncLogger
+import com.romm.android.utils.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -56,10 +55,10 @@ class SyncManager @Inject constructor(
      */
     private suspend fun getCachedPlatforms(): List<Platform> {
         if (platformListCache == null) {
-            SyncLogger.d(tag = "SyncManager", message = "Fetching platform list from API (cache miss)")
+            AppLogger.d(tag = "SyncManager", message = "Fetching platform list from API (cache miss)")
             platformListCache = apiService.getPlatforms()
         } else {
-            SyncLogger.d(tag = "SyncManager", message = "Using cached platform list (cache hit)")
+            AppLogger.d(tag = "SyncManager", message = "Using cached platform list (cache hit)")
         }
         return platformListCache!!
     }
@@ -73,7 +72,7 @@ class SyncManager @Inject constructor(
             // Clear caches at the start of sync planning
             clearCaches()
 
-            SyncLogger.i(tag = "SyncManager", message = "Creating sync plan...")
+            AppLogger.i(tag = "SyncManager", message = "Creating sync plan...")
 
             onProgress?.invoke(SyncProgress(
                 currentStep = "Scanning local files...",
@@ -104,7 +103,7 @@ class SyncManager @Inject constructor(
                     (syncRequest.saveStatesEnabled || item.type != SyncItemType.SAVE_STATE)
                 }
 
-            SyncLogger.i(tag = "SyncManager", message = "Found ${localItems.size} local items")
+            AppLogger.i(tag = "SyncManager", message = "Found ${localItems.size} local items")
 
             onProgress?.invoke(SyncProgress(
                 currentStep = "Loading remote files...",
@@ -118,7 +117,7 @@ class SyncManager @Inject constructor(
 
             // Get remote items from server
             val remoteItems = getRemoteItems(syncRequest, settings, onProgress)
-            SyncLogger.i(tag = "SyncManager", message = "Found ${remoteItems.size} remote items")
+            AppLogger.i(tag = "SyncManager", message = "Found ${remoteItems.size} remote items")
 
             onProgress?.invoke(SyncProgress(
                 currentStep = "Analyzing sync plan...",
@@ -163,7 +162,7 @@ class SyncManager @Inject constructor(
             plan
             
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Error creating sync plan", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Error creating sync plan", throwable = e)
             SyncPlan(
                 direction = syncRequest.direction,
                 comparisons = emptyList(),
@@ -257,7 +256,7 @@ class SyncManager @Inject constructor(
                     }
                     
                 } catch (e: Exception) {
-                    SyncLogger.e(tag = "SyncManager", message = "Error uploading ${comparison.localItem?.fileName}", throwable = e)
+                    AppLogger.e(tag = "SyncManager", message = "Error uploading ${comparison.localItem?.fileName}", throwable = e)
                     errors.add("Upload error: ${comparison.localItem?.fileName} - ${e.message}")
                 }
                 
@@ -287,7 +286,7 @@ class SyncManager @Inject constructor(
                     }
                     
                 } catch (e: Exception) {
-                    SyncLogger.e(tag = "SyncManager", message = "Error downloading ${comparison.remoteItem?.fileName}", throwable = e)
+                    AppLogger.e(tag = "SyncManager", message = "Error downloading ${comparison.remoteItem?.fileName}", throwable = e)
                     errors.add("Download error: ${comparison.remoteItem?.fileName} - ${e.message}")
                 }
                 
@@ -305,7 +304,7 @@ class SyncManager @Inject constructor(
             ))
             
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Sync execution failed", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Sync execution failed", throwable = e)
             onComplete(SyncResult(
                 success = false,
                 uploadedCount = 0,
@@ -326,7 +325,7 @@ class SyncManager @Inject constructor(
         val remoteItems = mutableListOf<RemoteSyncItem>()
 
         try {
-            SyncLogger.i(tag = "SyncManager", message = "Starting remote items fetch...")
+            AppLogger.i(tag = "SyncManager", message = "Starting remote items fetch...")
 
             onProgress?.invoke(SyncProgress(
                 currentStep = "Fetching save files and states...",
@@ -341,39 +340,39 @@ class SyncManager @Inject constructor(
             // Get all save files and states (no individual API calls needed!)
             val saves = if (syncRequest.saveFilesEnabled) {
                 try {
-                    SyncLogger.i(tag = "SyncManager", message = "Fetching all save files from server...")
+                    AppLogger.i(tag = "SyncManager", message = "Fetching all save files from server...")
                     apiService.getSaves().filter {
                         it.file_name.startsWith("android-sync-", ignoreCase = true)
                     }
                 } catch (e: Exception) {
-                    SyncLogger.e(tag = "SyncManager", message = "Failed to load save files", throwable = e)
+                    AppLogger.e(tag = "SyncManager", message = "Failed to load save files", throwable = e)
                     emptyList()
                 }
             } else {
-                SyncLogger.v(tag = "SyncManager", message = "Save files sync is disabled")
+                AppLogger.v(tag = "SyncManager", message = "Save files sync is disabled")
                 emptyList()
             }
 
             val states = if (syncRequest.saveStatesEnabled) {
                 try {
-                    SyncLogger.i(tag = "SyncManager", message = "Fetching all save states from server...")
+                    AppLogger.i(tag = "SyncManager", message = "Fetching all save states from server...")
                     apiService.getStates().filter {
                         it.file_name.startsWith("android-sync-", ignoreCase = true)
                     }
                 } catch (e: Exception) {
-                    SyncLogger.e(tag = "SyncManager", message = "Failed to load save states", throwable = e)
+                    AppLogger.e(tag = "SyncManager", message = "Failed to load save states", throwable = e)
                     emptyList()
                 }
             } else {
-                SyncLogger.v(tag = "SyncManager", message = "Save states sync is disabled")
+                AppLogger.v(tag = "SyncManager", message = "Save states sync is disabled")
                 emptyList()
             }
 
-            SyncLogger.i(tag = "SyncManager", message = "Retrieved ${saves.size} save files and ${states.size} save states from server")
+            AppLogger.i(tag = "SyncManager", message = "Retrieved ${saves.size} save files and ${states.size} save states from server")
 
             // Debug: log first few saves to see what we got
             saves.take(3).forEach { save ->
-                SyncLogger.v(tag = "SyncManager", message = "Sample save: ${save.file_name} -> file_path: ${save.file_path}")
+                AppLogger.v(tag = "SyncManager", message = "Sample save: ${save.file_name} -> file_path: ${save.file_path}")
             }
 
             onProgress?.invoke(SyncProgress(
@@ -394,7 +393,7 @@ class SyncManager @Inject constructor(
                     // Extract platform from file_path: "users/xxx/saves/PLATFORM/rom_id/emulator"
                     val platformFromPath = extractPlatformFromFilePath(save.file_path)
                     if (platformFromPath == null) {
-                        SyncLogger.w(tag = "SyncManager", message = "Could not extract platform from file_path: ${save.file_path}")
+                        AppLogger.w(tag = "SyncManager", message = "Could not extract platform from file_path: ${save.file_path}")
                         continue
                     }
 
@@ -404,20 +403,20 @@ class SyncManager @Inject constructor(
                     // Apply filters
                     if (syncRequest.platformFilter != null &&
                         !normalizedPlatform.equals(syncRequest.platformFilter, ignoreCase = true)) {
-                        SyncLogger.v(tag = "SyncManager", message = "Skipped save file due to platform filter: ${save.file_name} (platform: $normalizedPlatform)")
+                        AppLogger.v(tag = "SyncManager", message = "Skipped save file due to platform filter: ${save.file_name} (platform: $normalizedPlatform)")
                         continue
                     }
 
                     if (syncRequest.emulatorFilter != null &&
                         (save.emulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true)) {
-                        SyncLogger.v(tag = "SyncManager", message = "Skipped save file due to emulator filter: ${save.file_name}")
+                        AppLogger.v(tag = "SyncManager", message = "Skipped save file due to emulator filter: ${save.file_name}")
                         continue
                     }
 
                     if (syncRequest.gameFilter != null) {
                         val gameNameFromFilename = extractGameNameFromFilename(save.file_name)
                         if (!gameNameFromFilename.equals(syncRequest.gameFilter, ignoreCase = true)) {
-                            SyncLogger.v(tag = "SyncManager", message = "Skipped save file due to game filter: ${save.file_name}")
+                            AppLogger.v(tag = "SyncManager", message = "Skipped save file due to game filter: ${save.file_name}")
                             continue
                         }
                     }
@@ -434,7 +433,7 @@ class SyncManager @Inject constructor(
                         romId = save.rom_id
                     )
 
-                    SyncLogger.v(tag = "SyncManager", message = "Added remote save: ${remoteItem.fileName} -> platform: '${remoteItem.platform}'")
+                    AppLogger.v(tag = "SyncManager", message = "Added remote save: ${remoteItem.fileName} -> platform: '${remoteItem.platform}'")
                     remoteItems.add(remoteItem)
 
                     processedCount++
@@ -453,7 +452,7 @@ class SyncManager @Inject constructor(
                     }
 
                 } catch (e: Exception) {
-                    SyncLogger.w(tag = "SyncManager", message = "Error processing save file ${save.file_name}", throwable = e)
+                    AppLogger.w(tag = "SyncManager", message = "Error processing save file ${save.file_name}", throwable = e)
                 }
             }
 
@@ -463,7 +462,7 @@ class SyncManager @Inject constructor(
                     // Extract platform from file_path: "users/xxx/saves/PLATFORM/rom_id/emulator" or "users/xxx/states/PLATFORM/rom_id"
                     val platformFromPath = extractPlatformFromFilePath(state.file_path)
                     if (platformFromPath == null) {
-                        SyncLogger.w(tag = "SyncManager", message = "Could not extract platform from file_path: ${state.file_path}")
+                        AppLogger.w(tag = "SyncManager", message = "Could not extract platform from file_path: ${state.file_path}")
                         continue
                     }
 
@@ -473,20 +472,20 @@ class SyncManager @Inject constructor(
                     // Apply filters
                     if (syncRequest.platformFilter != null &&
                         !normalizedPlatform.equals(syncRequest.platformFilter, ignoreCase = true)) {
-                        SyncLogger.v(tag = "SyncManager", message = "Skipped save state due to platform filter: ${state.file_name} (platform: $normalizedPlatform)")
+                        AppLogger.v(tag = "SyncManager", message = "Skipped save state due to platform filter: ${state.file_name} (platform: $normalizedPlatform)")
                         continue
                     }
 
                     if (syncRequest.emulatorFilter != null &&
                         (state.emulator?.equals(syncRequest.emulatorFilter, ignoreCase = true) != true)) {
-                        SyncLogger.v(tag = "SyncManager", message = "Skipped save state due to emulator filter: ${state.file_name}")
+                        AppLogger.v(tag = "SyncManager", message = "Skipped save state due to emulator filter: ${state.file_name}")
                         continue
                     }
 
                     if (syncRequest.gameFilter != null) {
                         val gameNameFromFilename = extractGameNameFromFilename(state.file_name)
                         if (!gameNameFromFilename.equals(syncRequest.gameFilter, ignoreCase = true)) {
-                            SyncLogger.v(tag = "SyncManager", message = "Skipped save state due to game filter: ${state.file_name}")
+                            AppLogger.v(tag = "SyncManager", message = "Skipped save state due to game filter: ${state.file_name}")
                             continue
                         }
                     }
@@ -519,15 +518,15 @@ class SyncManager @Inject constructor(
                     }
 
                 } catch (e: Exception) {
-                    SyncLogger.w(tag = "SyncManager", message = "Error processing save state ${state.file_name}", throwable = e)
+                    AppLogger.w(tag = "SyncManager", message = "Error processing save state ${state.file_name}", throwable = e)
                 }
             }
 
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Error getting remote items", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Error getting remote items", throwable = e)
         }
 
-        SyncLogger.i(tag = "SyncManager", message = "Final remote items count: ${remoteItems.size}")
+        AppLogger.i(tag = "SyncManager", message = "Final remote items count: ${remoteItems.size}")
         return remoteItems
     }
 
@@ -544,7 +543,7 @@ class SyncManager @Inject constructor(
                 else -> LocalDateTime.now() // Fallback
             }
         } catch (e: Exception) {
-            SyncLogger.w(tag = "SyncManager", message = "Could not parse date: $dateString", throwable = e)
+            AppLogger.w(tag = "SyncManager", message = "Could not parse date: $dateString", throwable = e)
             LocalDateTime.now()
         }
     }
@@ -561,20 +560,20 @@ class SyncManager @Inject constructor(
         return try {
             // Split path: "users/userid/saves/PLATFORM/romid/emulator" or "users/userid/states/PLATFORM/romid"
             val parts = filePath.split("/").filter { it.isNotEmpty() }
-            SyncLogger.v(tag = "SyncManager", message = "Extracting platform from path: $filePath -> parts: $parts")
+            AppLogger.v(tag = "SyncManager", message = "Extracting platform from path: $filePath -> parts: $parts")
 
             // Find the platform part after "saves" or "states"
             val saveOrStateIndex = parts.indexOfFirst { it == "saves" || it == "states" }
             if (saveOrStateIndex != -1 && saveOrStateIndex + 1 < parts.size) {
                 val platform = parts[saveOrStateIndex + 1]
-                SyncLogger.v(tag = "SyncManager", message = "Extracted platform: '$platform' from path: $filePath")
+                AppLogger.v(tag = "SyncManager", message = "Extracted platform: '$platform' from path: $filePath")
                 return platform
             }
 
-            SyncLogger.w(tag = "SyncManager", message = "Could not find platform in path: $filePath")
+            AppLogger.w(tag = "SyncManager", message = "Could not find platform in path: $filePath")
             null
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Error extracting platform from path: $filePath", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Error extracting platform from path: $filePath", throwable = e)
             null
         }
     }
@@ -597,10 +596,10 @@ class SyncManager @Inject constructor(
             // Remove timestamp and extension: "Game Name [YYYY-MM-DD HH-mm-ss-SSS].ext"
             val gameName = withoutPrefix.replace(TIMESTAMP_WITH_EXT_PATTERN, "")
 
-            SyncLogger.v(tag = "SyncManager", message = "Extracted game name: '$gameName' from filename: $fileName")
+            AppLogger.v(tag = "SyncManager", message = "Extracted game name: '$gameName' from filename: $fileName")
             gameName
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Error extracting game name from filename: $fileName", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Error extracting game name from filename: $fileName", throwable = e)
             fileName.substringBeforeLast(".")
         }
     }
@@ -620,25 +619,25 @@ class SyncManager @Inject constructor(
         for (remoteItem in remoteItems) {
             val baseFileName = extractBaseFileName(remoteItem.fileName)
             val smartIdentifier = "${remoteItem.platform}/${baseFileName}"
-            SyncLogger.v(tag = "SyncManager", message = "Remote identifier: '$smartIdentifier' for file: '${remoteItem.fileName}' (base: '$baseFileName', platform: '${remoteItem.platform}')")
+            AppLogger.v(tag = "SyncManager", message = "Remote identifier: '$smartIdentifier' for file: '${remoteItem.fileName}' (base: '$baseFileName', platform: '${remoteItem.platform}')")
 
             val existingItem = remoteBySmartIdentifier[smartIdentifier]
             if (existingItem == null) {
                 // No existing version, add this one
-                SyncLogger.v(tag = "SyncManager", message = "Adding new remote identifier: '$smartIdentifier'")
+                AppLogger.v(tag = "SyncManager", message = "Adding new remote identifier: '$smartIdentifier'")
                 remoteBySmartIdentifier[smartIdentifier] = remoteItem
             } else {
-                SyncLogger.v(tag = "SyncManager", message = "Found existing remote identifier: '$smartIdentifier', comparing versions")
+                AppLogger.v(tag = "SyncManager", message = "Found existing remote identifier: '$smartIdentifier', comparing versions")
                 // Compare timestamps to keep the most recent version
                 val currentTimestamp = extractTimestampFromFileName(remoteItem.fileName)
                 val existingTimestamp = extractTimestampFromFileName(existingItem.fileName)
-                SyncLogger.v(tag = "SyncManager", message = "Timestamp comparison: current=${currentTimestamp}, existing=${existingTimestamp}")
+                AppLogger.v(tag = "SyncManager", message = "Timestamp comparison: current=${currentTimestamp}, existing=${existingTimestamp}")
 
                 if (currentTimestamp != null && existingTimestamp != null) {
                     if (currentTimestamp.isAfter(existingTimestamp)) {
                         // Current item is newer, replace existing
                         remoteBySmartIdentifier[smartIdentifier] = remoteItem
-                        SyncLogger.v(tag = "SyncManager", message = "Found newer version: ${remoteItem.fileName} > ${existingItem.fileName}")
+                        AppLogger.v(tag = "SyncManager", message = "Found newer version: ${remoteItem.fileName} > ${existingItem.fileName}")
                     }
                 } else if (currentTimestamp != null && existingTimestamp == null) {
                     // Current has timestamp, existing doesn't - prefer timestamped version
@@ -651,22 +650,22 @@ class SyncManager @Inject constructor(
         // Map local items by filename
         for (localItem in localItems) {
             val smartIdentifier = "${localItem.platform}/${localItem.fileName}"
-            SyncLogger.v(tag = "SyncManager", message = "Local identifier: '$smartIdentifier' for file: '${localItem.fileName}'")
+            AppLogger.v(tag = "SyncManager", message = "Local identifier: '$smartIdentifier' for file: '${localItem.fileName}'")
             localBySmartIdentifier[smartIdentifier] = localItem
         }
         
         // Find matches and conflicts using smart identifiers
         val allSmartIdentifiers = (localBySmartIdentifier.keys + remoteBySmartIdentifier.keys).distinct()
 
-        SyncLogger.v(tag = "SyncManager", message = "Smart identifiers summary:")
-        SyncLogger.v(tag = "SyncManager", message = "  Local identifiers (${localBySmartIdentifier.size}): ${localBySmartIdentifier.keys.take(5)}")
-        SyncLogger.v(tag = "SyncManager", message = "  Remote identifiers (${remoteBySmartIdentifier.size}): ${remoteBySmartIdentifier.keys.take(5)}")
+        AppLogger.v(tag = "SyncManager", message = "Smart identifiers summary:")
+        AppLogger.v(tag = "SyncManager", message = "  Local identifiers (${localBySmartIdentifier.size}): ${localBySmartIdentifier.keys.take(5)}")
+        AppLogger.v(tag = "SyncManager", message = "  Remote identifiers (${remoteBySmartIdentifier.size}): ${remoteBySmartIdentifier.keys.take(5)}")
 
         for (identifier in allSmartIdentifiers) {
             val localItem = localBySmartIdentifier[identifier]
             val remoteItem = remoteBySmartIdentifier[identifier]
 
-            SyncLogger.v(tag = "SyncManager", message = "Processing identifier: '$identifier' - Local: ${localItem?.fileName ?: "NONE"}, Remote: ${remoteItem?.fileName ?: "NONE"}")
+            AppLogger.v(tag = "SyncManager", message = "Processing identifier: '$identifier' - Local: ${localItem?.fileName ?: "NONE"}, Remote: ${remoteItem?.fileName ?: "NONE"}")
             
             val comparison = when {
                 localItem != null && remoteItem != null -> {
@@ -725,7 +724,7 @@ class SyncManager @Inject constructor(
                     java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS")
                 )
             } catch (e: Exception) {
-                SyncLogger.w(tag = "SyncManager", message = "Failed to parse timestamp from filename: $fileName", throwable = e)
+                AppLogger.w(tag = "SyncManager", message = "Failed to parse timestamp from filename: $fileName", throwable = e)
                 null
             }
         }
@@ -742,15 +741,15 @@ class SyncManager @Inject constructor(
         val localSize = localItem.sizeBytes
         val remoteSize = remoteItem.sizeBytes
         
-        SyncLogger.v(tag = "SyncManager", message = "Comparing files:")
-        SyncLogger.v(tag = "SyncManager", message = "  Local: ${localItem.fileName} (${localTime})")
-        SyncLogger.v(tag = "SyncManager", message = "  Remote: ${remoteItem.fileName} (extracted: ${remoteTimeFromFilename})")
+        AppLogger.v(tag = "SyncManager", message = "Comparing files:")
+        AppLogger.v(tag = "SyncManager", message = "  Local: ${localItem.fileName} (${localTime})")
+        AppLogger.v(tag = "SyncManager", message = "  Remote: ${remoteItem.fileName} (extracted: ${remoteTimeFromFilename})")
 
         return when {
             // If we can extract timestamp from filename, compare with local file timestamp
             remoteTimeFromFilename != null -> {
                 val timeDifferenceSeconds = Math.abs(java.time.Duration.between(localTime, remoteTimeFromFilename).seconds)
-                SyncLogger.v(tag = "SyncManager", message = "  Time difference: ${timeDifferenceSeconds}s")
+                AppLogger.v(tag = "SyncManager", message = "  Time difference: ${timeDifferenceSeconds}s")
                 
                 when {
                     // Files are identical (same size and timestamp within 1 second tolerance)
@@ -848,43 +847,43 @@ class SyncManager @Inject constructor(
                 SyncItemType.SAVE_STATE -> settings.saveStatesDirectory
             }
             
-            SyncLogger.v(tag = "SyncManager", message = "Getting DocumentFile for upload:")
-            SyncLogger.v(tag = "SyncManager", message = "  baseUri: '$baseUri'")
-            SyncLogger.v(tag = "SyncManager", message = "  relativePathFromBaseDir: '${localItem.relativePathFromBaseDir}'")
+            AppLogger.v(tag = "SyncManager", message = "Getting DocumentFile for upload:")
+            AppLogger.v(tag = "SyncManager", message = "  baseUri: '$baseUri'")
+            AppLogger.v(tag = "SyncManager", message = "  relativePathFromBaseDir: '${localItem.relativePathFromBaseDir}'")
             
             val documentFile = fileScanner.getDocumentFileForPath(baseUri, localItem.relativePathFromBaseDir)
             if (documentFile == null) {
-                SyncLogger.e(tag = "SyncManager", message = "Could not get DocumentFile for ${localItem.fileName}")
+                AppLogger.e(tag = "SyncManager", message = "Could not get DocumentFile for ${localItem.fileName}")
                 return false
             }
             
-            SyncLogger.v(tag = "SyncManager", message = "  DocumentFile URI: ${documentFile.uri}")
-            SyncLogger.v(tag = "SyncManager", message = "  DocumentFile exists: ${documentFile.exists()}")
-            SyncLogger.v(tag = "SyncManager", message = "  DocumentFile name: ${documentFile.name}")
-            SyncLogger.v(tag = "SyncManager", message = "  DocumentFile size: ${documentFile.length()}")
+            AppLogger.v(tag = "SyncManager", message = "  DocumentFile URI: ${documentFile.uri}")
+            AppLogger.v(tag = "SyncManager", message = "  DocumentFile exists: ${documentFile.exists()}")
+            AppLogger.v(tag = "SyncManager", message = "  DocumentFile name: ${documentFile.name}")
+            AppLogger.v(tag = "SyncManager", message = "  DocumentFile size: ${documentFile.length()}")
                 
             // Find the ROM ID by matching game name and platform
             val romId = findRomIdForFile(localItem)
             if (romId == null) {
-                SyncLogger.w(tag = "SyncManager", message = "Could not find ROM ID for ${localItem.fileName}")
+                AppLogger.w(tag = "SyncManager", message = "Could not find ROM ID for ${localItem.fileName}")
                 return false
             }
             
             when (localItem.type) {
                 SyncItemType.SAVE_FILE -> {
                     // Always create new file with fresh timestamp instead of updating
-                    SyncLogger.i(tag = "SyncManager", message = if (remoteItem != null) "Creating new version of save file (instead of updating)" else "Creating new save file")
+                    AppLogger.i(tag = "SyncManager", message = if (remoteItem != null) "Creating new version of save file (instead of updating)" else "Creating new save file")
                     apiService.uploadSaveFile(romId, localItem.emulator, documentFile, onProgress)
                 }
                 SyncItemType.SAVE_STATE -> {
                     // Always create new file with fresh timestamp instead of updating
-                    SyncLogger.i(tag = "SyncManager", message = if (remoteItem != null) "Creating new version of save state (instead of updating)" else "Creating new save state")
+                    AppLogger.i(tag = "SyncManager", message = if (remoteItem != null) "Creating new version of save state (instead of updating)" else "Creating new save state")
                     val uploadedState = apiService.uploadSaveState(romId, localItem.emulator, documentFile, onProgress)
 
                     // Check for matching screenshot file
                     val screenshotFile = findMatchingScreenshot(localItem, settings)
                     if (screenshotFile != null) {
-                        SyncLogger.v(tag = "SyncManager", message = "Found matching screenshot for save state: ${screenshotFile.name}")
+                        AppLogger.v(tag = "SyncManager", message = "Found matching screenshot for save state: ${screenshotFile.name}")
                         try {
                             val screenshot = apiService.uploadScreenshot(
                                 romId = romId,
@@ -893,22 +892,22 @@ class SyncManager @Inject constructor(
                                 originalSaveStateFileName = uploadedState.file_name // Use the timestamped filename from server
                             )
                             if (screenshot != null) {
-                                SyncLogger.v(tag = "SyncManager", message = "Successfully uploaded screenshot: ${screenshot.file_name}")
+                                AppLogger.v(tag = "SyncManager", message = "Successfully uploaded screenshot: ${screenshot.file_name}")
                             } else {
-                                SyncLogger.w(tag = "SyncManager", message = "Failed to upload screenshot for save state ${localItem.fileName}")
+                                AppLogger.w(tag = "SyncManager", message = "Failed to upload screenshot for save state ${localItem.fileName}")
                             }
                         } catch (e: Exception) {
-                            SyncLogger.w(tag = "SyncManager", message = "Error uploading screenshot for ${localItem.fileName}", throwable = e)
+                            AppLogger.w(tag = "SyncManager", message = "Error uploading screenshot for ${localItem.fileName}", throwable = e)
                         }
                     } else {
-                        SyncLogger.v(tag = "SyncManager", message = "No matching screenshot found for save state: ${localItem.fileName}")
+                        AppLogger.v(tag = "SyncManager", message = "No matching screenshot found for save state: ${localItem.fileName}")
                     }
 
                     uploadedState
                 }
             }
 
-            SyncLogger.i(tag = "SyncManager", message = "Successfully uploaded ${localItem.fileName}")
+            AppLogger.i(tag = "SyncManager", message = "Successfully uploaded ${localItem.fileName}")
             
             // Clean up old versions if history limit is set
             val historyLimit = when (localItem.type) {
@@ -924,10 +923,10 @@ class SyncManager @Inject constructor(
             
         } catch (e: retrofit2.HttpException) {
             val errorBody = e.response()?.errorBody()?.string()
-            SyncLogger.e(tag = "SyncManager", message = "HTTP ${e.code()} uploading ${localItem.fileName}: $errorBody", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "HTTP ${e.code()} uploading ${localItem.fileName}: $errorBody", throwable = e)
             false
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Failed to upload ${localItem.fileName}", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Failed to upload ${localItem.fileName}", throwable = e)
             false
         }
     }
@@ -940,12 +939,12 @@ class SyncManager @Inject constructor(
             val baseUri = settings.saveStatesDirectory
             if (baseUri.isEmpty()) return null
             
-            SyncLogger.v(tag = "SyncManager", message = "Looking for screenshot matching save state: ${localItem.fileName}")
+            AppLogger.v(tag = "SyncManager", message = "Looking for screenshot matching save state: ${localItem.fileName}")
 
             // Get the directory containing the save state file
             val saveStateDocumentFile = fileScanner.getDocumentFileForPath(baseUri, localItem.relativePathFromBaseDir)
             if (saveStateDocumentFile == null || saveStateDocumentFile.parentFile == null) {
-                SyncLogger.v(tag = "SyncManager", message = "Could not get parent directory for save state file")
+                AppLogger.v(tag = "SyncManager", message = "Could not get parent directory for save state file")
                 return null
             }
 
@@ -955,7 +954,7 @@ class SyncManager @Inject constructor(
             // e.g., "Super Metroid.state5" -> "Super Metroid.state5.png"
             val expectedScreenshotName = "${localItem.fileName}.png"
 
-            SyncLogger.v(tag = "SyncManager", message = "Looking for screenshot with name: $expectedScreenshotName")
+            AppLogger.v(tag = "SyncManager", message = "Looking for screenshot with name: $expectedScreenshotName")
 
             // Search for the matching screenshot
             val matchingScreenshot = parentDir.listFiles()?.find { file ->
@@ -963,35 +962,35 @@ class SyncManager @Inject constructor(
             }
 
             if (matchingScreenshot != null) {
-                SyncLogger.v(tag = "SyncManager", message = "Found matching screenshot: ${matchingScreenshot.name}")
+                AppLogger.v(tag = "SyncManager", message = "Found matching screenshot: ${matchingScreenshot.name}")
                 return matchingScreenshot
             } else {
-                SyncLogger.v(tag = "SyncManager", message = "No matching screenshot found for: ${localItem.fileName}")
+                AppLogger.v(tag = "SyncManager", message = "No matching screenshot found for: ${localItem.fileName}")
                 return null
             }
             
         } catch (e: Exception) {
-            SyncLogger.w(tag = "SyncManager", message = "Error searching for matching screenshot", throwable = e)
+            AppLogger.w(tag = "SyncManager", message = "Error searching for matching screenshot", throwable = e)
             return null
         }
     }
     
     private suspend fun findRomIdForFile(localItem: LocalSyncItem): Int? {
         return try {
-            SyncLogger.d(tag = "SyncManager", message = "Finding ROM ID for file: ${localItem.fileName}")
-            SyncLogger.v(tag = "SyncManager", message = "  Platform: ${localItem.platform}")
-            SyncLogger.v(tag = "SyncManager", message = "  Game name from file: '${localItem.gameName}'")
+            AppLogger.d(tag = "SyncManager", message = "Finding ROM ID for file: ${localItem.fileName}")
+            AppLogger.v(tag = "SyncManager", message = "  Platform: ${localItem.platform}")
+            AppLogger.v(tag = "SyncManager", message = "  Game name from file: '${localItem.gameName}'")
 
             // Extract the base filename without save file extensions for matching
             val baseFileName = extractGameNameFromSaveFileName(localItem.fileName)
-            SyncLogger.v(tag = "SyncManager", message = "  Base filename: '$baseFileName'")
+            AppLogger.v(tag = "SyncManager", message = "  Base filename: '$baseFileName'")
 
             // Use cached platform list
             val platforms = getCachedPlatforms()
 
             // Convert ES-DE folder name to RomM platform slug if needed
             val rommPlatformSlug = PlatformMapper.getRommSlugFromEsdeFolder(localItem.platform)
-            SyncLogger.v(tag = "SyncManager", message = "  Converted '${localItem.platform}' to RomM slug: '$rommPlatformSlug'")
+            AppLogger.v(tag = "SyncManager", message = "  Converted '${localItem.platform}' to RomM slug: '$rommPlatformSlug'")
 
             val platform = platforms.find {
                 it.slug.equals(rommPlatformSlug, ignoreCase = true) ||
@@ -1001,46 +1000,46 @@ class SyncManager @Inject constructor(
             }
 
             if (platform == null) {
-                SyncLogger.w(tag = "SyncManager", message = "  Could not find platform: ${localItem.platform}")
+                AppLogger.w(tag = "SyncManager", message = "  Could not find platform: ${localItem.platform}")
                 return null
             }
 
-            SyncLogger.v(tag = "SyncManager", message = "  Found platform: ${platform.display_name} (${platform.slug})")
+            AppLogger.v(tag = "SyncManager", message = "  Found platform: ${platform.display_name} (${platform.slug})")
 
             // Check ROM ID lookup cache
             val cacheKey = Pair(platform.id, baseFileName.lowercase())
             val cachedRomId = romIdLookupCache[cacheKey]
             if (cachedRomId != null) {
-                SyncLogger.d(tag = "SyncManager", message = "  ROM ID cache hit: $cachedRomId")
+                AppLogger.d(tag = "SyncManager", message = "  ROM ID cache hit: $cachedRomId")
                 return cachedRomId
             } else if (romIdLookupCache.containsKey(cacheKey)) {
                 // We've already looked this up and found nothing
-                SyncLogger.d(tag = "SyncManager", message = "  ROM ID cache hit: null (previously not found)")
+                AppLogger.d(tag = "SyncManager", message = "  ROM ID cache hit: null (previously not found)")
                 return null
             }
 
             // Cache miss - perform the lookup
-            SyncLogger.d(tag = "SyncManager", message = "  ROM ID cache miss, performing lookup")
+            AppLogger.d(tag = "SyncManager", message = "  ROM ID cache miss, performing lookup")
 
             // Use search to find games more efficiently
             val searchTerm = baseFileName.take(10) // Use first 10 chars to search
             val games = apiService.getGames(platformId = platform.id, searchTerm = searchTerm)
-            SyncLogger.v(tag = "SyncManager", message = "  Searched for '$searchTerm' and found ${games.size} games")
+            AppLogger.v(tag = "SyncManager", message = "  Searched for '$searchTerm' and found ${games.size} games")
 
             // Try to match using multiple strategies
             val gameName = localItem.gameName?.lowercase()
             val baseFileNameLower = baseFileName.lowercase()
 
-            SyncLogger.v(tag = "SyncManager", message = "  Searching for matches with:")
-            SyncLogger.v(tag = "SyncManager", message = "    gameName: '$gameName'")
-            SyncLogger.v(tag = "SyncManager", message = "    baseFileName: '$baseFileNameLower'")
+            AppLogger.v(tag = "SyncManager", message = "  Searching for matches with:")
+            AppLogger.v(tag = "SyncManager", message = "    gameName: '$gameName'")
+            AppLogger.v(tag = "SyncManager", message = "    baseFileName: '$baseFileNameLower'")
 
             // Match only by comparing save/state filename (no ext) with ROM fs_name_no_ext
             val matchedGame = games.find { game ->
                 val fsNameNoExtMatchWithFileName = game.fs_name_no_ext.lowercase() == baseFileNameLower
 
-                SyncLogger.v(tag = "SyncManager", message = "    Checking game: '${game.name}' / fs_name_no_ext: '${game.fs_name_no_ext}'")
-                SyncLogger.v(tag = "SyncManager", message = "      Match with baseFileName: $fsNameNoExtMatchWithFileName")
+                AppLogger.v(tag = "SyncManager", message = "    Checking game: '${game.name}' / fs_name_no_ext: '${game.fs_name_no_ext}'")
+                AppLogger.v(tag = "SyncManager", message = "      Match with baseFileName: $fsNameNoExtMatchWithFileName")
 
                 fsNameNoExtMatchWithFileName
             }
@@ -1050,15 +1049,15 @@ class SyncManager @Inject constructor(
             romIdLookupCache[cacheKey] = romId
 
             if (matchedGame != null) {
-                SyncLogger.d(tag = "SyncManager", message = "  Found matching game: ${matchedGame.name} (ID: ${matchedGame.id}) - cached for future lookups")
+                AppLogger.d(tag = "SyncManager", message = "  Found matching game: ${matchedGame.name} (ID: ${matchedGame.id}) - cached for future lookups")
                 return matchedGame.id
             } else {
-                SyncLogger.w(tag = "SyncManager", message = "  No matching game found! - cached null result")
+                AppLogger.w(tag = "SyncManager", message = "  No matching game found! - cached null result")
                 return null
             }
 
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Error finding ROM ID for ${localItem.fileName}", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Error finding ROM ID for ${localItem.fileName}", throwable = e)
             null
         }
     }
@@ -1078,11 +1077,11 @@ class SyncManager @Inject constructor(
                 }
             }
             
-            SyncLogger.i(tag = "SyncManager", message = "Successfully downloaded ${remoteItem.fileName}")
+            AppLogger.i(tag = "SyncManager", message = "Successfully downloaded ${remoteItem.fileName}")
             true
             
         } catch (e: Exception) {
-            SyncLogger.e(tag = "SyncManager", message = "Failed to download ${remoteItem.fileName}", throwable = e)
+            AppLogger.e(tag = "SyncManager", message = "Failed to download ${remoteItem.fileName}", throwable = e)
             false
         }
     }
@@ -1090,7 +1089,7 @@ class SyncManager @Inject constructor(
     private suspend fun cleanupOldVersions(romId: Int, localItem: LocalSyncItem, historyLimit: Int) {
         try {
             val baseFileName = extractBaseFileName(localItem.fileName)
-            SyncLogger.v(tag = "SyncManager", message = "Cleaning up old versions for '$baseFileName', keeping $historyLimit most recent")
+            AppLogger.v(tag = "SyncManager", message = "Cleaning up old versions for '$baseFileName', keeping $historyLimit most recent")
 
             // Check cache first
             val cacheKey = Pair(romId, localItem.type)
@@ -1101,10 +1100,10 @@ class SyncManager @Inject constructor(
                     @Suppress("UNCHECKED_CAST")
                     val cachedSaves = remoteFilesCache[cacheKey] as? List<SaveFile>
                     val saves = if (cachedSaves != null) {
-                        SyncLogger.d(tag = "SyncManager", message = "Using cached save files for ROM $romId (cache hit)")
+                        AppLogger.d(tag = "SyncManager", message = "Using cached save files for ROM $romId (cache hit)")
                         cachedSaves
                     } else {
-                        SyncLogger.d(tag = "SyncManager", message = "Fetching save files for ROM $romId (cache miss)")
+                        AppLogger.d(tag = "SyncManager", message = "Fetching save files for ROM $romId (cache miss)")
                         val fetchedSaves = apiService.getSaves(romId = romId)
                         remoteFilesCache[cacheKey] = fetchedSaves
                         fetchedSaves
@@ -1133,10 +1132,10 @@ class SyncManager @Inject constructor(
                     @Suppress("UNCHECKED_CAST")
                     val cachedStates = remoteFilesCache[cacheKey] as? List<SaveState>
                     val states = if (cachedStates != null) {
-                        SyncLogger.d(tag = "SyncManager", message = "Using cached save states for ROM $romId (cache hit)")
+                        AppLogger.d(tag = "SyncManager", message = "Using cached save states for ROM $romId (cache hit)")
                         cachedStates
                     } else {
-                        SyncLogger.d(tag = "SyncManager", message = "Fetching save states for ROM $romId (cache miss)")
+                        AppLogger.d(tag = "SyncManager", message = "Fetching save states for ROM $romId (cache miss)")
                         val fetchedStates = apiService.getStates(romId = romId)
                         remoteFilesCache[cacheKey] = fetchedStates
                         fetchedStates
@@ -1164,7 +1163,7 @@ class SyncManager @Inject constructor(
             }
             
             if (allItems.size <= historyLimit) {
-                SyncLogger.v(tag = "SyncManager", message = "Only ${allItems.size} versions found, no cleanup needed")
+                AppLogger.v(tag = "SyncManager", message = "Only ${allItems.size} versions found, no cleanup needed")
                 return
             }
 
@@ -1172,14 +1171,14 @@ class SyncManager @Inject constructor(
             val sortedItems = allItems.sortedByDescending { remoteItem -> remoteItem.lastModified }
             val itemsToDelete = sortedItems.drop(historyLimit)
 
-            SyncLogger.v(tag = "SyncManager", message = "Found ${allItems.size} versions, deleting ${itemsToDelete.size} oldest ones")
+            AppLogger.v(tag = "SyncManager", message = "Found ${allItems.size} versions, deleting ${itemsToDelete.size} oldest ones")
 
             // Collect all IDs to delete and use batch deletion
             val idsToDelete = itemsToDelete.map { it.id }
 
             if (idsToDelete.isNotEmpty()) {
                 try {
-                    SyncLogger.v(tag = "SyncManager", message = "Batch deleting ${idsToDelete.size} old versions: $idsToDelete")
+                    AppLogger.v(tag = "SyncManager", message = "Batch deleting ${idsToDelete.size} old versions: $idsToDelete")
                     val deletedCount = when (localItem.type) {
                         SyncItemType.SAVE_FILE -> {
                             apiService.deleteSavesBatch(idsToDelete)
@@ -1190,20 +1189,20 @@ class SyncManager @Inject constructor(
                     }
 
                     if (deletedCount > 0) {
-                        SyncLogger.v(tag = "SyncManager", message = "Successfully deleted $deletedCount old versions in batch")
+                        AppLogger.v(tag = "SyncManager", message = "Successfully deleted $deletedCount old versions in batch")
                     } else {
-                        SyncLogger.w(tag = "SyncManager", message = "Batch delete operation returned 0 deleted items")
+                        AppLogger.w(tag = "SyncManager", message = "Batch delete operation returned 0 deleted items")
                     }
                 } catch (e: retrofit2.HttpException) {
                     val errorBody = e.response()?.errorBody()?.string()
-                    SyncLogger.w(tag = "SyncManager", message = "HTTP ${e.code()} batch deleting old versions: $errorBody", throwable = e)
+                    AppLogger.w(tag = "SyncManager", message = "HTTP ${e.code()} batch deleting old versions: $errorBody", throwable = e)
                 } catch (e: Exception) {
-                    SyncLogger.w(tag = "SyncManager", message = "Failed to batch delete old versions", throwable = e)
+                    AppLogger.w(tag = "SyncManager", message = "Failed to batch delete old versions", throwable = e)
                 }
             }
             
         } catch (e: Exception) {
-            SyncLogger.w(tag = "SyncManager", message = "Failed to cleanup old versions for ${localItem.fileName}", throwable = e)
+            AppLogger.w(tag = "SyncManager", message = "Failed to cleanup old versions for ${localItem.fileName}", throwable = e)
         }
     }
 

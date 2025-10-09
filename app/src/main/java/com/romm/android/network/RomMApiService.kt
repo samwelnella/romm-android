@@ -12,6 +12,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import androidx.documentfile.provider.DocumentFile
 import android.content.Context
+import com.romm.android.utils.AppLogger
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -351,9 +352,9 @@ class RomMApiService @Inject constructor(
         val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
         val fullUrl = "$baseUrl$encodedPath"
         
-        android.util.Log.d("RomMApiService", "Raw download path: $rawDownloadPath")
-        android.util.Log.d("RomMApiService", "Encoded download path: $encodedPath")
-        android.util.Log.d("RomMApiService", "Full URL: $fullUrl")
+        AppLogger.d(tag = "RomMApiService", message = "Raw download path: $rawDownloadPath")
+        AppLogger.d(tag = "RomMApiService", message = "Encoded download path: $encodedPath")
+        AppLogger.d(tag = "RomMApiService", message = "Full URL: $fullUrl")
         
         return getApi().downloadFromUrl(fullUrl)
     }
@@ -387,15 +388,15 @@ class RomMApiService @Inject constructor(
         val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
         val fullUrl = "$baseUrl$encodedPath"
         
-        android.util.Log.d("RomMApiService", "Raw download path: $rawDownloadPath")
-        android.util.Log.d("RomMApiService", "Encoded download path: $encodedPath")
-        android.util.Log.d("RomMApiService", "Full URL: $fullUrl")
+        AppLogger.d(tag = "RomMApiService", message = "Raw download path: $rawDownloadPath")
+        AppLogger.d(tag = "RomMApiService", message = "Encoded download path: $encodedPath")
+        AppLogger.d(tag = "RomMApiService", message = "Full URL: $fullUrl")
         
         return getApi().downloadFromUrl(fullUrl)
     }
     
     suspend fun downloadSaveFileFromRomMetadata(romId: Int, fileExtension: String): Response<ResponseBody>? {
-        android.util.Log.d("RomMApiService", "Getting ROM details for ROM ID: $romId")
+        AppLogger.d(tag = "RomMApiService", message = "Getting ROM details for ROM ID: $romId")
         val detailedGame = getApi().getDetailedGame(romId)
         
         // Find matching save file by extension
@@ -404,24 +405,24 @@ class RomMApiService @Inject constructor(
         } ?: emptyList()
         
         if (matchingFiles.isEmpty()) {
-            android.util.Log.w("RomMApiService", "No save files with extension $fileExtension found for ROM $romId")
+            AppLogger.w(tag = "RomMApiService", message = "No save files with extension $fileExtension found for ROM $romId")
             return null
         }
         
         // Sort by filename (later timestamps last) and pick the most recent
         val latestFile = matchingFiles.sortedByDescending { it.file_name }.first()
-        android.util.Log.d("RomMApiService", "Latest save file: ${latestFile.file_name}")
-        android.util.Log.d("RomMApiService", "Expected size: ${latestFile.file_size_bytes} bytes")
+        AppLogger.d(tag = "RomMApiService", message = "Latest save file: ${latestFile.file_name}")
+        AppLogger.d(tag = "RomMApiService", message = "Expected size: ${latestFile.file_size_bytes} bytes")
         
         // Use download_path from metadata
         val downloadPath = latestFile.download_path ?: "/api/raw/assets/${latestFile.file_path}"
-        android.util.Log.d("RomMApiService", "Downloading from: $downloadPath")
+        AppLogger.d(tag = "RomMApiService", message = "Downloading from: $downloadPath")
         
         return getApi().downloadFromPath(downloadPath)
     }
     
     suspend fun downloadSaveStateFromRomMetadata(romId: Int, fileExtension: String): Response<ResponseBody>? {
-        android.util.Log.d("RomMApiService", "Getting ROM details for ROM ID: $romId")
+        AppLogger.d(tag = "RomMApiService", message = "Getting ROM details for ROM ID: $romId")
         val detailedGame = getApi().getDetailedGame(romId)
         
         // Find matching save state by extension
@@ -430,18 +431,18 @@ class RomMApiService @Inject constructor(
         } ?: emptyList()
         
         if (matchingFiles.isEmpty()) {
-            android.util.Log.w("RomMApiService", "No save states with extension $fileExtension found for ROM $romId")
+            AppLogger.w(tag = "RomMApiService", message = "No save states with extension $fileExtension found for ROM $romId")
             return null
         }
         
         // Sort by filename (later timestamps last) and pick the most recent
         val latestFile = matchingFiles.sortedByDescending { it.file_name }.first()
-        android.util.Log.d("RomMApiService", "Latest save state: ${latestFile.file_name}")
-        android.util.Log.d("RomMApiService", "Expected size: ${latestFile.file_size_bytes} bytes")
+        AppLogger.d(tag = "RomMApiService", message = "Latest save state: ${latestFile.file_name}")
+        AppLogger.d(tag = "RomMApiService", message = "Expected size: ${latestFile.file_size_bytes} bytes")
         
         // Use download_path from metadata
         val downloadPath = latestFile.download_path ?: "/api/raw/assets/${latestFile.file_path}"
-        android.util.Log.d("RomMApiService", "Downloading from: $downloadPath")
+        AppLogger.d(tag = "RomMApiService", message = "Downloading from: $downloadPath")
         
         return getApi().downloadFromPath(downloadPath)
     }
@@ -454,7 +455,7 @@ class RomMApiService @Inject constructor(
     ): SaveFile {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        android.util.Log.d("RomMApiService", "Uploading save file: $fileName (${documentFile.length()} bytes)")
+        AppLogger.d(tag = "RomMApiService", message = "Uploading save file: $fileName (${documentFile.length()} bytes)")
         
         // Create streaming request body with progress callback
         val requestBody = object : RequestBody() {
@@ -497,12 +498,12 @@ class RomMApiService @Inject constructor(
             body = requestBody
         )
         
-        android.util.Log.d("RomMApiService", "Created multipart body: $timestampedFileName")
+        AppLogger.d(tag = "RomMApiService", message = "Created multipart body: $timestampedFileName")
         
-        android.util.Log.d("RomMApiService", "API call parameters:")
-        android.util.Log.d("RomMApiService", "  - rom_id: $romId")
-        android.util.Log.d("RomMApiService", "  - emulator: $emulator")
-        android.util.Log.d("RomMApiService", "  - filename (with android-sync- prefix): $timestampedFileName")
+        AppLogger.d(tag = "RomMApiService", message = "API call parameters:")
+        AppLogger.d(tag = "RomMApiService", message = "  - rom_id: $romId")
+        AppLogger.d(tag = "RomMApiService", message = "  - emulator: $emulator")
+        AppLogger.d(tag = "RomMApiService", message = "  - filename (with android-sync- prefix): $timestampedFileName")
         
         return getApi().uploadSaveFile(romId, emulator, multipartBody)
     }
@@ -515,7 +516,7 @@ class RomMApiService @Inject constructor(
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        android.util.Log.d("RomMApiService", "Uploading save state: $fileName (${documentFile.length()} bytes)")
+        AppLogger.d(tag = "RomMApiService", message = "Uploading save state: $fileName (${documentFile.length()} bytes)")
         
         // Create streaming request body with progress callback
         val requestBody = object : RequestBody() {
@@ -558,9 +559,9 @@ class RomMApiService @Inject constructor(
             body = requestBody
         )
         
-        android.util.Log.d("RomMApiService", "Save state upload:")
-        android.util.Log.d("RomMApiService", "  - emulator: $emulator")
-        android.util.Log.d("RomMApiService", "  - filename (with android-sync- prefix): $timestampedFileName")
+        AppLogger.d(tag = "RomMApiService", message = "Save state upload:")
+        AppLogger.d(tag = "RomMApiService", message = "  - emulator: $emulator")
+        AppLogger.d(tag = "RomMApiService", message = "  - filename (with android-sync- prefix): $timestampedFileName")
         
         return getApi().uploadSaveState(romId, emulator, multipartBody)
     }
@@ -571,7 +572,7 @@ class RomMApiService @Inject constructor(
     ): SaveFile {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        android.util.Log.d("RomMApiService", "Updating save file: $fileName (${documentFile.length()} bytes)")
+        AppLogger.d(tag = "RomMApiService", message = "Updating save file: $fileName (${documentFile.length()} bytes)")
         
         // Create streaming request body
         val requestBody = object : RequestBody() {
@@ -611,7 +612,7 @@ class RomMApiService @Inject constructor(
             body = requestBody
         )
         
-        android.util.Log.d("RomMApiService", "Update save file with multipart body: $timestampedFileName")
+        AppLogger.d(tag = "RomMApiService", message = "Update save file with multipart body: $timestampedFileName")
         
         return getApi().updateSaveFileMultipart(saveFileId, multipartBody)
     }
@@ -622,7 +623,7 @@ class RomMApiService @Inject constructor(
     ): SaveState {
         val fileName = documentFile.name ?: throw IllegalArgumentException("File name is required")
         
-        android.util.Log.d("RomMApiService", "Updating save state: $fileName (${documentFile.length()} bytes)")
+        AppLogger.d(tag = "RomMApiService", message = "Updating save state: $fileName (${documentFile.length()} bytes)")
         
         // Create streaming request body
         val requestBody = object : RequestBody() {
@@ -662,7 +663,7 @@ class RomMApiService @Inject constructor(
             body = requestBody
         )
         
-        android.util.Log.d("RomMApiService", "Update save state with multipart body: $timestampedFileName")
+        AppLogger.d(tag = "RomMApiService", message = "Update save state with multipart body: $timestampedFileName")
         
         return getApi().updateSaveStateMultipart(saveStateId, multipartBody)
     }
@@ -676,23 +677,23 @@ class RomMApiService @Inject constructor(
         return try {
             val fileName = documentFile.name ?: throw IllegalArgumentException("Screenshot file name is required")
             
-            android.util.Log.d("RomMApiService", "Uploading screenshot: $fileName for save state: $originalSaveStateFileName")
+            AppLogger.d(tag = "RomMApiService", message = "Uploading screenshot: $fileName for save state: $originalSaveStateFileName")
             
             // Extract timestamp from save state filename using improved regex
             val timestamp = extractTimestampFromSaveStateFileName(originalSaveStateFileName)
             if (timestamp == null) {
-                android.util.Log.w("RomMApiService", "Could not extract timestamp from save state filename: $originalSaveStateFileName")
+                AppLogger.w(tag = "RomMApiService", message = "Could not extract timestamp from save state filename: $originalSaveStateFileName")
                 // Use current timestamp as fallback
                 val now = java.time.LocalDateTime.now()
                 val fallbackTimestamp = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss-SSS"))
-                android.util.Log.d("RomMApiService", "Using fallback timestamp: $fallbackTimestamp")
+                AppLogger.d(tag = "RomMApiService", message = "Using fallback timestamp: $fallbackTimestamp")
                 return uploadScreenshotWithTimestamp(romId, stateId, documentFile, originalSaveStateFileName, fallbackTimestamp)
             }
             
             return uploadScreenshotWithTimestamp(romId, stateId, documentFile, originalSaveStateFileName, timestamp)
             
         } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Failed to upload screenshot", e)
+            AppLogger.e(tag = "RomMApiService", message = "Failed to upload screenshot", throwable = e)
             null
         }
     }
@@ -705,7 +706,7 @@ class RomMApiService @Inject constructor(
         timestamp: String
     ): Screenshot? {
         return try {
-            android.util.Log.d("RomMApiService", "🕐 Extracted timestamp from save state: $timestamp")
+            AppLogger.d(tag = "RomMApiService", message = "🕐 Extracted timestamp from save state: $timestamp")
             
             // Extract base name from save state filename (improved logic)
             val baseName = extractBaseNameFromSaveStateFileName(originalSaveStateFileName)
@@ -713,8 +714,8 @@ class RomMApiService @Inject constructor(
             // Create screenshot filename with matching timestamp AND android-sync- prefix
             val screenshotFileName = "android-sync-$baseName [$timestamp].png"
             
-            android.util.Log.d("RomMApiService", "📸 Screenshot filename with matching timestamp: $screenshotFileName")
-            android.util.Log.d("RomMApiService", "🔗 Linking to save state ID: $stateId")
+            AppLogger.d(tag = "RomMApiService", message = "📸 Screenshot filename with matching timestamp: $screenshotFileName")
+            AppLogger.d(tag = "RomMApiService", message = "🔗 Linking to save state ID: $stateId")
             
             // Create streaming request body
             val requestBody = object : RequestBody() {
@@ -752,17 +753,17 @@ class RomMApiService @Inject constructor(
             
             val multipartBody = multipartBodyBuilder.build()
             
-            android.util.Log.d("RomMApiService", "📡 Uploading screenshot with parameters:")
-            android.util.Log.d("RomMApiService", "  - rom_id: $romId")
-            android.util.Log.d("RomMApiService", "  - state_id: $stateId")
-            android.util.Log.d("RomMApiService", "  - filename: $screenshotFileName")
-            android.util.Log.d("RomMApiService", "  - file_name: $screenshotFileName")
+            AppLogger.d(tag = "RomMApiService", message = "📡 Uploading screenshot with parameters:")
+            AppLogger.d(tag = "RomMApiService", message = "  - rom_id: $romId")
+            AppLogger.d(tag = "RomMApiService", message = "  - state_id: $stateId")
+            AppLogger.d(tag = "RomMApiService", message = "  - filename: $screenshotFileName")
+            AppLogger.d(tag = "RomMApiService", message = "  - file_name: $screenshotFileName")
             
             // Use direct HTTP call since we need to send multipart form data differently
             uploadScreenshotMultipart(romId, stateId, multipartBody)
             
         } catch (e: Exception) {
-            android.util.Log.e("RomMApiService", "Failed to upload screenshot with timestamp", e)
+            AppLogger.e(tag = "RomMApiService", message = "Failed to upload screenshot with timestamp", throwable = e)
             null
         }
     }
@@ -810,17 +811,17 @@ class RomMApiService @Inject constructor(
         
         response.use {
             if (it.isSuccessful) {
-                android.util.Log.d("RomMApiService", "🎉 Screenshot with matching timestamp uploaded!")
+                AppLogger.d(tag = "RomMApiService", message = "🎉 Screenshot with matching timestamp uploaded!")
                 val responseBody = it.body?.string() ?: ""
-                android.util.Log.d("RomMApiService", "📡 Screenshot upload response: ${it.code}")
-                android.util.Log.d("RomMApiService", "   Response: ${responseBody.take(200)}")
+                AppLogger.d(tag = "RomMApiService", message = "📡 Screenshot upload response: ${it.code}")
+                AppLogger.d(tag = "RomMApiService", message = "   Response: ${responseBody.take(200)}")
                 
                 // Parse response to Screenshot object
                 val gson = com.google.gson.Gson()
                 gson.fromJson(responseBody, Screenshot::class.java)
             } else {
                 val errorBody = it.body?.string() ?: ""
-                android.util.Log.e("RomMApiService", "❌ Screenshot upload failed: ${it.code} - ${errorBody.take(200)}")
+                AppLogger.e(tag = "RomMApiService", message = "❌ Screenshot upload failed: ${it.code} - ${errorBody.take(200)}")
                 throw Exception("Screenshot upload failed with code: ${it.code}")
             }
         }
@@ -862,10 +863,10 @@ class RomMApiService @Inject constructor(
     suspend fun getScreenshotsForSaveState(stateId: Int): List<Screenshot> {
         return try {
             val screenshots = getApi().getScreenshots(stateId = stateId)
-            android.util.Log.d("RomMApiService", "Found ${screenshots.size} screenshots for save state ID: $stateId")
+            AppLogger.d(tag = "RomMApiService", message = "Found ${screenshots.size} screenshots for save state ID: $stateId")
             screenshots
         } catch (e: Exception) {
-            android.util.Log.w("RomMApiService", "Failed to get screenshots for save state $stateId", e)
+            AppLogger.w(tag = "RomMApiService", message = "Failed to get screenshots for save state $stateId", throwable = e)
             emptyList()
         }
     }
@@ -882,15 +883,15 @@ class RomMApiService @Inject constructor(
         val baseUrl = if (settings.host.endsWith("/")) settings.host.dropLast(1) else settings.host
         val fullUrl = "$baseUrl$encodedPath"
         
-        android.util.Log.d("RomMApiService", "Raw screenshot download path: $rawDownloadPath")
-        android.util.Log.d("RomMApiService", "Encoded screenshot download path: $encodedPath")
-        android.util.Log.d("RomMApiService", "Full screenshot URL: $fullUrl")
+        AppLogger.d(tag = "RomMApiService", message = "Raw screenshot download path: $rawDownloadPath")
+        AppLogger.d(tag = "RomMApiService", message = "Encoded screenshot download path: $encodedPath")
+        AppLogger.d(tag = "RomMApiService", message = "Full screenshot URL: $fullUrl")
         
         return getApi().downloadFromUrl(fullUrl)
     }
     
     suspend fun deleteSave(id: Int): Boolean {
-        android.util.Log.d("RomMApiService", "Deleting save file with ID: $id")
+        AppLogger.d(tag = "RomMApiService", message = "Deleting save file with ID: $id")
         val request = DeleteSavesRequest(saves = listOf(id))
         val response = getApi().deleteSaves(request)
         
@@ -901,12 +902,12 @@ class RomMApiService @Inject constructor(
             response.errorBody()?.string() ?: ""
         }
         
-        android.util.Log.d("RomMApiService", "Delete save response code: ${response.code()}, body: '$responseBody'")
+        AppLogger.d(tag = "RomMApiService", message = "Delete save response code: ${response.code()}, body: '$responseBody'")
         return response.isSuccessful
     }
     
     suspend fun deleteSaveState(id: Int): Boolean {
-        android.util.Log.d("RomMApiService", "Deleting save state with ID: $id")
+        AppLogger.d(tag = "RomMApiService", message = "Deleting save state with ID: $id")
         val request = DeleteStatesRequest(states = listOf(id))
         val response = getApi().deleteSaveStates(request)
 
@@ -917,7 +918,7 @@ class RomMApiService @Inject constructor(
             response.errorBody()?.string() ?: ""
         }
 
-        android.util.Log.d("RomMApiService", "Delete save state response code: ${response.code()}, body: '$responseBody'")
+        AppLogger.d(tag = "RomMApiService", message = "Delete save state response code: ${response.code()}, body: '$responseBody'")
         return response.isSuccessful
     }
 
@@ -929,21 +930,21 @@ class RomMApiService @Inject constructor(
      */
     suspend fun deleteSavesBatch(ids: List<Int>): Int {
         if (ids.isEmpty()) {
-            android.util.Log.d("RomMApiService", "No save files to delete (empty list)")
+            AppLogger.d(tag = "RomMApiService", message = "No save files to delete (empty list)")
             return 0
         }
 
-        android.util.Log.d("RomMApiService", "Batch deleting ${ids.size} save files: $ids")
+        AppLogger.d(tag = "RomMApiService", message = "Batch deleting ${ids.size} save files: $ids")
         val request = DeleteSavesRequest(saves = ids)
         val response = getApi().deleteSaves(request)
 
         return if (response.isSuccessful) {
             val responseBody = response.body()?.string() ?: ""
-            android.util.Log.d("RomMApiService", "Batch delete saves successful: ${response.code()}, body: '$responseBody'")
+            AppLogger.d(tag = "RomMApiService", message = "Batch delete saves successful: ${response.code()}, body: '$responseBody'")
             ids.size // Assume all were deleted successfully
         } else {
             val errorBody = response.errorBody()?.string() ?: ""
-            android.util.Log.e("RomMApiService", "Batch delete saves failed: ${response.code()}, error: '$errorBody'")
+            AppLogger.e(tag = "RomMApiService", message = "Batch delete saves failed: ${response.code()}, error: '$errorBody'")
             0
         }
     }
@@ -956,21 +957,21 @@ class RomMApiService @Inject constructor(
      */
     suspend fun deleteSaveStatesBatch(ids: List<Int>): Int {
         if (ids.isEmpty()) {
-            android.util.Log.d("RomMApiService", "No save states to delete (empty list)")
+            AppLogger.d(tag = "RomMApiService", message = "No save states to delete (empty list)")
             return 0
         }
 
-        android.util.Log.d("RomMApiService", "Batch deleting ${ids.size} save states: $ids")
+        AppLogger.d(tag = "RomMApiService", message = "Batch deleting ${ids.size} save states: $ids")
         val request = DeleteStatesRequest(states = ids)
         val response = getApi().deleteSaveStates(request)
 
         return if (response.isSuccessful) {
             val responseBody = response.body()?.string() ?: ""
-            android.util.Log.d("RomMApiService", "Batch delete states successful: ${response.code()}, body: '$responseBody'")
+            AppLogger.d(tag = "RomMApiService", message = "Batch delete states successful: ${response.code()}, body: '$responseBody'")
             ids.size // Assume all were deleted successfully
         } else {
             val errorBody = response.errorBody()?.string() ?: ""
-            android.util.Log.e("RomMApiService", "Batch delete states failed: ${response.code()}, error: '$errorBody'")
+            AppLogger.e(tag = "RomMApiService", message = "Batch delete states failed: ${response.code()}, error: '$errorBody'")
             0
         }
     }

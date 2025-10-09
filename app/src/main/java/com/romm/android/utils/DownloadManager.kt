@@ -15,9 +15,9 @@ import com.romm.android.data.Firmware
 import com.romm.android.data.Game
 import com.romm.android.network.RomMApiService
 import com.romm.android.workers.UnifiedDownloadWorker
+import com.romm.android.utils.AppLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
-import android.util.Log
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import java.util.UUID
@@ -77,7 +77,7 @@ class DownloadManager @Inject constructor(
     private val cancelReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_CANCEL_ALL) {
-                Log.d("DownloadManager", "Cancel all broadcast received")
+                AppLogger.d(tag = "DownloadManager", message = "Cancel all broadcast received")
                 cancelAllDownloads()
             }
         }
@@ -109,16 +109,16 @@ class DownloadManager @Inject constructor(
             val allWork = workManager.getWorkInfosByTag(DOWNLOAD_TAG).get()
             
             // Debug: Log all work states with more detail
-            Log.d("DownloadManager", "=== RECOVERY DEBUG START ===")
-            Log.d("DownloadManager", "Total historical work found: ${allWork.size}")
+            AppLogger.d(tag = "DownloadManager", message = "=== RECOVERY DEBUG START ===")
+            AppLogger.d(tag = "DownloadManager", message = "Total historical work found: ${allWork.size}")
             
             // Group work by state for better debugging
             val workByState = allWork.groupBy { it.state }
             workByState.forEach { (state, works) ->
-                Log.d("DownloadManager", "State $state: ${works.size} items")
+                AppLogger.d(tag = "DownloadManager", message = "State $state: ${works.size} items")
                 if (works.size <= 10) { // Don't spam for large numbers
                     works.forEach { work ->
-                        Log.d("DownloadManager", "  - Work ${work.id}: tags=${work.tags}")
+                        AppLogger.d(tag = "DownloadManager", message = "  - Work ${work.id}: tags=${work.tags}")
                     }
                 }
             }
@@ -128,9 +128,9 @@ class DownloadManager @Inject constructor(
                 it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
             }
             
-            Log.d("DownloadManager", "Found ${activeWork.size} truly active downloads:")
+            AppLogger.d(tag = "DownloadManager", message = "Found ${activeWork.size} truly active downloads:")
             activeWork.forEach { workInfo ->
-                Log.d("DownloadManager", "Active work ${workInfo.id}: state=${workInfo.state}, tags=${workInfo.tags}")
+                AppLogger.d(tag = "DownloadManager", message = "Active work ${workInfo.id}: state=${workInfo.state}, tags=${workInfo.tags}")
             }
             
             // CRITICAL: Check if there are more downloads from the same session that haven't started yet
@@ -139,33 +139,33 @@ class DownloadManager @Inject constructor(
                 workInfo.tags.find { tag -> tag.startsWith("session_") }
             }.distinct()
             
-            Log.d("DownloadManager", "All session tags found in historical work: $recentSessionTags")
+            AppLogger.d(tag = "DownloadManager", message = "All session tags found in historical work: $recentSessionTags")
             
             if (activeWork.isNotEmpty()) {
-                Log.d("DownloadManager", "Attempting session recovery for ${activeWork.size} active downloads")
+                AppLogger.d(tag = "DownloadManager", message = "Attempting session recovery for ${activeWork.size} active downloads")
                 
                 // Look for session tags in active work first
                 val activeSessionTags = activeWork.mapNotNull { workInfo ->
                     workInfo.tags.find { tag -> tag.startsWith("session_") }
                 }.distinct()
                 
-                Log.d("DownloadManager", "Session tags in active work: $activeSessionTags")
+                AppLogger.d(tag = "DownloadManager", message = "Session tags in active work: $activeSessionTags")
                 
                 // If we have a recent session, check for ALL work from that session (including non-active)
                 val sessionToRecover = activeSessionTags.firstOrNull() ?: recentSessionTags.maxByOrNull { it }
                 
                 if (sessionToRecover != null) {
                     val originalSessionId = sessionToRecover.removePrefix("session_")
-                    Log.d("DownloadManager", "Recovering session: $originalSessionId")
+                    AppLogger.d(tag = "DownloadManager", message = "Recovering session: $originalSessionId")
                     
                     // Get ALL work from this session (active + blocked/pending)
                     val allSessionWork = allWork.filter { workInfo ->
                         workInfo.tags.contains(sessionToRecover)
                     }
                     
-                    Log.d("DownloadManager", "Total work items for session $originalSessionId: ${allSessionWork.size}")
+                    AppLogger.d(tag = "DownloadManager", message = "Total work items for session $originalSessionId: ${allSessionWork.size}")
                     allSessionWork.forEach { workInfo ->
-                        Log.d("DownloadManager", "Session work ${workInfo.id}: state=${workInfo.state}")
+                        AppLogger.d(tag = "DownloadManager", message = "Session work ${workInfo.id}: state=${workInfo.state}")
                     }
                     
                     // Count non-completed work items
@@ -173,7 +173,7 @@ class DownloadManager @Inject constructor(
                         it.state != WorkInfo.State.SUCCEEDED && it.state != WorkInfo.State.FAILED && it.state != WorkInfo.State.CANCELLED
                     }
                     
-                    Log.d("DownloadManager", "Non-completed work items: ${nonCompletedWork.size}")
+                    AppLogger.d(tag = "DownloadManager", message = "Non-completed work items: ${nonCompletedWork.size}")
                     
                     // Create recovery session tracking ALL work from the session
                     currentSession = DownloadSession(
@@ -188,10 +188,10 @@ class DownloadManager @Inject constructor(
                         currentSession?.workIds?.add(workInfo.id)
                     }
                     
-                    Log.d("DownloadManager", "Recovery session created: totalDownloads=${currentSession?.totalDownloads}, tracking ${currentSession?.workIds?.size} work items")
+                    AppLogger.d(tag = "DownloadManager", message = "Recovery session created: totalDownloads=${currentSession?.totalDownloads}, tracking ${currentSession?.workIds?.size} work items")
                 } else {
                     // No session info - create simple recovery
-                    Log.d("DownloadManager", "No session info found - creating simple recovery")
+                    AppLogger.d(tag = "DownloadManager", message = "No session info found - creating simple recovery")
                     
                     currentSession = DownloadSession(
                         sessionId = "recovery_${System.currentTimeMillis()}",
@@ -215,13 +215,13 @@ class DownloadManager @Inject constructor(
                 // Show recovery notification
                 updateSummaryNotification()
                 
-                Log.d("DownloadManager", "=== RECOVERY DEBUG END - Setup complete, monitoring ${currentSession?.workIds?.size} work items ===")
+                AppLogger.d(tag = "DownloadManager", message = "=== RECOVERY DEBUG END - Setup complete, monitoring ${currentSession?.workIds?.size} work items ===")
             } else {
-                Log.d("DownloadManager", "No active downloads found during recovery check")
-                Log.d("DownloadManager", "=== RECOVERY DEBUG END - No recovery needed ===")
+                AppLogger.d(tag = "DownloadManager", message = "No active downloads found during recovery check")
+                AppLogger.d(tag = "DownloadManager", message = "=== RECOVERY DEBUG END - No recovery needed ===")
             }
         } catch (e: Exception) {
-            Log.e("DownloadManager", "Error during orphaned download recovery", e)
+            AppLogger.e(tag = "DownloadManager", message = "Error during orphaned download recovery", throwable = e)
         }
     }
     
@@ -243,7 +243,7 @@ class DownloadManager @Inject constructor(
             else -> 1
         }
         
-        Log.d("DownloadManager", "Estimated maxConcurrentDownloads based on ${activeCount} active items: $estimatedMaxConcurrent")
+        AppLogger.d(tag = "DownloadManager", message = "Estimated maxConcurrentDownloads based on ${activeCount} active items: $estimatedMaxConcurrent")
         return estimatedMaxConcurrent
     }
     
@@ -269,7 +269,7 @@ class DownloadManager @Inject constructor(
      */
     suspend fun downloadGame(game: Game, settings: AppSettings) {
         if (settings.downloadDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Download directory is empty!")
+            AppLogger.e(tag = "DownloadManager", message = "Download directory is empty!")
             return
         }
         
@@ -292,12 +292,12 @@ class DownloadManager @Inject constructor(
      */
     suspend fun downloadAllGames(games: List<Game>, settings: AppSettings) {
         if (settings.downloadDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Download directory is empty!")
+            AppLogger.e(tag = "DownloadManager", message = "Download directory is empty!")
             return
         }
         
         if (games.isEmpty()) {
-            Log.w("DownloadManager", "No games to download")
+            AppLogger.w(tag = "DownloadManager", message = "No games to download")
             return
         }
         
@@ -320,12 +320,12 @@ class DownloadManager @Inject constructor(
      */
     suspend fun downloadFirmware(firmware: List<Firmware>, settings: AppSettings) {
         if (settings.downloadDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Download directory is empty!")
+            AppLogger.e(tag = "DownloadManager", message = "Download directory is empty!")
             return
         }
         
         if (firmware.isEmpty()) {
-            Log.w("DownloadManager", "No firmware to download")
+            AppLogger.w(tag = "DownloadManager", message = "No firmware to download")
             return
         }
         
@@ -348,12 +348,12 @@ class DownloadManager @Inject constructor(
      */
     suspend fun downloadSaveFiles(saves: List<com.romm.android.data.SaveFile>, settings: AppSettings) {
         if (settings.saveFilesDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Save files directory is empty!")
+            AppLogger.e(tag = "DownloadManager", message = "Save files directory is empty!")
             return
         }
         
         if (saves.isEmpty()) {
-            Log.w("DownloadManager", "No save files to download")
+            AppLogger.w(tag = "DownloadManager", message = "No save files to download")
             return
         }
         
@@ -377,12 +377,12 @@ class DownloadManager @Inject constructor(
      */
     suspend fun downloadSaveStates(states: List<com.romm.android.data.SaveState>, settings: AppSettings) {
         if (settings.saveStatesDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Save states directory is empty!")
+            AppLogger.e(tag = "DownloadManager", message = "Save states directory is empty!")
             return
         }
         
         if (states.isEmpty()) {
-            Log.w("DownloadManager", "No save states to download")
+            AppLogger.w(tag = "DownloadManager", message = "No save states to download")
             return
         }
         
@@ -406,17 +406,17 @@ class DownloadManager @Inject constructor(
      */
     suspend fun downloadMissingGames(games: List<Game>, settings: AppSettings) = withContext(Dispatchers.IO) {
         if (settings.downloadDirectory.isEmpty()) {
-            Log.e("DownloadManager", "Download directory is empty!")
+            AppLogger.e(tag = "DownloadManager", message = "Download directory is empty!")
             return@withContext
         }
         
         val baseDir = DocumentFile.fromTreeUri(context, Uri.parse(settings.downloadDirectory))
         if (baseDir == null) {
-            Log.e("DownloadManager", "Cannot access download directory")
+            AppLogger.e(tag = "DownloadManager", message = "Cannot access download directory")
             return@withContext
         }
         
-        Log.d("DownloadManager", "Checking ${games.size} games for local existence...")
+        AppLogger.d(tag = "DownloadManager", message = "Checking ${games.size} games for local existence...")
         val startTime = System.currentTimeMillis()
         
         // Cache platform directories to avoid repeated lookups
@@ -433,7 +433,7 @@ class DownloadManager @Inject constructor(
         }
         
         val checkTime = System.currentTimeMillis() - startTime
-        Log.d("DownloadManager", "Found ${missingGames.size} missing games out of ${games.size} total (checked in ${checkTime}ms)")
+        AppLogger.d(tag = "DownloadManager", message = "Found ${missingGames.size} missing games out of ${games.size} total (checked in ${checkTime}ms)")
         
         if (missingGames.isNotEmpty()) {
             // Switch back to main context for the download call
@@ -451,7 +451,7 @@ class DownloadManager @Inject constructor(
             // Use ES-DE folder mapping if available
             val folderName = PlatformMapper.getEsdeFolderName(game.platform_fs_slug)
             if (folderName != game.platform_fs_slug) {
-                Log.d("DownloadManager", "Platform mapping: ${game.platform_fs_slug} -> $folderName")
+                AppLogger.d(tag = "DownloadManager", message = "Platform mapping: ${game.platform_fs_slug} -> $folderName")
             }
             val platformDir = findPlatformDirectory(baseDir, folderName)
                 ?: return false
@@ -467,7 +467,7 @@ class DownloadManager @Inject constructor(
             }
         } catch (e: Exception) {
             // If any file system operation fails, assume game doesn't exist
-            Log.w("DownloadManager", "Error checking if game exists: ${game.name}", e)
+            AppLogger.w(tag = "DownloadManager", message = "Error checking if game exists: ${game.name}", throwable = e)
             false
         }
     }
@@ -484,7 +484,7 @@ class DownloadManager @Inject constructor(
             // Use ES-DE folder mapping if available
             val folderName = PlatformMapper.getEsdeFolderName(game.platform_fs_slug)
             if (folderName != game.platform_fs_slug) {
-                Log.d("DownloadManager", "Platform mapping: ${game.platform_fs_slug} -> $folderName")
+                AppLogger.d(tag = "DownloadManager", message = "Platform mapping: ${game.platform_fs_slug} -> $folderName")
             }
             
             // Use cached platform directory or find and cache it
@@ -503,7 +503,7 @@ class DownloadManager @Inject constructor(
             }
         } catch (e: Exception) {
             // If any file system operation fails, assume game doesn't exist
-            Log.w("DownloadManager", "Error checking if game exists: ${game.name}", e)
+            AppLogger.w(tag = "DownloadManager", message = "Error checking if game exists: ${game.name}", throwable = e)
             false
         }
     }
@@ -532,11 +532,11 @@ class DownloadManager @Inject constructor(
         
         if (existingSession != null && !existingSession.isCompleted) {
             // Add to existing session
-            Log.d("DownloadManager", "Adding ${downloadItems.size} items to existing session: ${existingSession.sessionId}")
+            AppLogger.d(tag = "DownloadManager", message = "Adding ${downloadItems.size} items to existing session: ${existingSession.sessionId}")
             addItemsToExistingSession(downloadItems, settings, existingSession)
         } else {
             // Create new session
-            Log.d("DownloadManager", "Creating new download session: ${downloadItems.size} items, max concurrent: ${settings.maxConcurrentDownloads}")
+            AppLogger.d(tag = "DownloadManager", message = "Creating new download session: ${downloadItems.size} items, max concurrent: ${settings.maxConcurrentDownloads}")
             createNewSession(downloadItems, settings)
         }
     }
@@ -577,7 +577,7 @@ class DownloadManager @Inject constructor(
         // Update notification to show new totals
         updateSummaryNotification()
         
-        Log.d("DownloadManager", "Added ${downloadItems.size} items to session. New total: ${session.totalDownloads}")
+        AppLogger.d(tag = "DownloadManager", message = "Added ${downloadItems.size} items to session. New total: ${session.totalDownloads}")
     }
     
     /**
@@ -677,7 +677,7 @@ class DownloadManager @Inject constructor(
      * Enqueue work requests with proper concurrency control
      */
     private fun enqueueWorkWithConcurrencyControl(workRequests: List<OneTimeWorkRequest>, maxConcurrent: Int) {
-        Log.d("DownloadManager", "Enqueuing ${workRequests.size} downloads with max concurrent: $maxConcurrent")
+        AppLogger.d(tag = "DownloadManager", message = "Enqueuing ${workRequests.size} downloads with max concurrent: $maxConcurrent")
         
         if (maxConcurrent == 1) {
             // Sequential execution - chain all work requests one after another
@@ -687,14 +687,14 @@ class DownloadManager @Inject constructor(
                     continuation = continuation.then(workRequests[i])
                 }
                 continuation.enqueue()
-                Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads sequentially")
+                AppLogger.d(tag = "DownloadManager", message = "Enqueued ${workRequests.size} downloads sequentially")
             }
         } else {
             // Concurrent execution - just enqueue all requests directly
             // WorkManager will run them concurrently up to system limits
             // We'll control concurrency in the worker itself
             workManager.enqueue(workRequests)
-            Log.d("DownloadManager", "Enqueued ${workRequests.size} downloads for concurrent execution (max: $maxConcurrent)")
+            AppLogger.d(tag = "DownloadManager", message = "Enqueued ${workRequests.size} downloads for concurrent execution (max: $maxConcurrent)")
         }
     }
     
@@ -702,12 +702,12 @@ class DownloadManager @Inject constructor(
      * Add additional work to existing session
      */
     private fun enqueueAdditionalWorkToExistingChains(workRequests: List<OneTimeWorkRequest>, maxConcurrent: Int, sessionId: String) {
-        Log.d("DownloadManager", "Adding ${workRequests.size} downloads to existing session with max concurrent: $maxConcurrent")
+        AppLogger.d(tag = "DownloadManager", message = "Adding ${workRequests.size} downloads to existing session with max concurrent: $maxConcurrent")
         
         // Just enqueue the additional work - concurrency is controlled by the worker
         workManager.enqueue(workRequests)
         
-        Log.d("DownloadManager", "Enqueued ${workRequests.size} additional downloads")
+        AppLogger.d(tag = "DownloadManager", message = "Enqueued ${workRequests.size} additional downloads")
     }
     
     /**
@@ -718,7 +718,7 @@ class DownloadManager @Inject constructor(
         monitoringJob = sessionScope.launch {
             val session = currentSession ?: return@launch
             
-            Log.d("DownloadManager", "Starting session monitoring for ${session.workIds.size} work items")
+            AppLogger.d(tag = "DownloadManager", message = "Starting session monitoring for ${session.workIds.size} work items")
             
             while (!session.isCompleted) {
                 try {
@@ -727,7 +727,7 @@ class DownloadManager @Inject constructor(
                         try {
                             workManager.getWorkInfoById(workId).get()
                         } catch (e: Exception) {
-                            Log.w("DownloadManager", "Could not get work info for $workId", e)
+                            AppLogger.w(tag = "DownloadManager", message = "Could not get work info for $workId", throwable = e)
                             null
                         }
                     }
@@ -737,23 +737,23 @@ class DownloadManager @Inject constructor(
                     var failedThisCheck = 0
                     var cancelledThisCheck = 0
                     
-                    Log.d("DownloadManager", "=== MONITORING UPDATE ===")
-                    Log.d("DownloadManager", "Checking ${workInfos.size} work items:")
+                    AppLogger.d(tag = "DownloadManager", message = "=== MONITORING UPDATE ===")
+                    AppLogger.d(tag = "DownloadManager", message = "Checking ${workInfos.size} work items:")
                     
                     for (workInfo in workInfos) {
-                        Log.d("DownloadManager", "Work ${workInfo.id}: state=${workInfo.state}")
+                        AppLogger.d(tag = "DownloadManager", message = "Work ${workInfo.id}: state=${workInfo.state}")
                         when (workInfo.state) {
                             WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED -> activeCount++
                             WorkInfo.State.SUCCEEDED -> completedThisCheck++
                             WorkInfo.State.FAILED -> failedThisCheck++
                             WorkInfo.State.CANCELLED -> cancelledThisCheck++
                             else -> {
-                                Log.d("DownloadManager", "Work ${workInfo.id}: unexpected state ${workInfo.state}")
+                                AppLogger.d(tag = "DownloadManager", message = "Work ${workInfo.id}: unexpected state ${workInfo.state}")
                             }
                         }
                     }
                     
-                    Log.d("DownloadManager", "Count summary: active=$activeCount, completed=$completedThisCheck, failed=$failedThisCheck, cancelled=$cancelledThisCheck, total=${session.totalDownloads}")
+                    AppLogger.d(tag = "DownloadManager", message = "Count summary: active=$activeCount, completed=$completedThisCheck, failed=$failedThisCheck, cancelled=$cancelledThisCheck, total=${session.totalDownloads}")
                     
                     // Update counters
                     val prevCompleted = completedCount.get()
@@ -766,7 +766,7 @@ class DownloadManager @Inject constructor(
                     
                     // Log counter changes
                     if (completedThisCheck != prevCompleted || failedThisCheck != prevFailed || cancelledThisCheck != prevCancelled) {
-                        Log.d("DownloadManager", "Counters updated: completed $prevCompleted->$completedThisCheck, failed $prevFailed->$failedThisCheck, cancelled $prevCancelled->$cancelledThisCheck")
+                        AppLogger.d(tag = "DownloadManager", message = "Counters updated: completed $prevCompleted->$completedThisCheck, failed $prevFailed->$failedThisCheck, cancelled $prevCancelled->$cancelledThisCheck")
                     }
                     
                     // Update notification
@@ -775,7 +775,7 @@ class DownloadManager @Inject constructor(
                     // Check if session is complete
                     val totalProcessed = completedThisCheck + failedThisCheck + cancelledThisCheck
                     if (activeCount == 0 && totalProcessed >= session.totalDownloads) {
-                        Log.d("DownloadManager", "Session completed: $totalProcessed out of ${session.totalDownloads} processed")
+                        AppLogger.d(tag = "DownloadManager", message = "Session completed: $totalProcessed out of ${session.totalDownloads} processed")
                         session.isCompleted = true
                         showFinalNotification()
                         
@@ -785,11 +785,11 @@ class DownloadManager @Inject constructor(
                         break
                     }
                     
-                    Log.d("DownloadManager", "=== MONITORING UPDATE END ===")
+                    AppLogger.d(tag = "DownloadManager", message = "=== MONITORING UPDATE END ===")
                     
                     delay(1000) // Check every second
                 } catch (e: Exception) {
-                    Log.e("DownloadManager", "Error monitoring session", e)
+                    AppLogger.e(tag = "DownloadManager", message = "Error monitoring session", throwable = e)
                     delay(2000)
                 }
             }
@@ -886,7 +886,7 @@ class DownloadManager @Inject constructor(
     fun cancelAllDownloads() {
         val session = currentSession
         if (session != null) {
-            Log.d("DownloadManager", "Cancelling all downloads for session: ${session.sessionId}")
+            AppLogger.d(tag = "DownloadManager", message = "Cancelling all downloads for session: ${session.sessionId}")
             
             // Cancel all work by tags (use original session ID for recovery sessions)
             val cancelSessionId = session.originalSessionId ?: session.sessionId
@@ -910,7 +910,7 @@ class DownloadManager @Inject constructor(
         // Clear session
         currentSession = null
         
-        Log.d("DownloadManager", "All downloads cancelled")
+        AppLogger.d(tag = "DownloadManager", message = "All downloads cancelled")
     }
     
     /**
@@ -926,7 +926,7 @@ class DownloadManager @Inject constructor(
         try {
             context.unregisterReceiver(cancelReceiver)
         } catch (e: Exception) {
-            Log.w("DownloadManager", "Error unregistering receiver", e)
+            AppLogger.w(tag = "DownloadManager", message = "Error unregistering receiver", throwable = e)
         }
         sessionScope.cancel()
     }
