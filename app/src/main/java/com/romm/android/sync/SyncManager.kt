@@ -22,13 +22,43 @@ class SyncManager @Inject constructor(
     private val downloadManager: DownloadManager,
     private val fileScanner: FileScanner
 ) {
-    
+    // Cache for platform list during a sync operation
+    private var platformListCache: List<Platform>? = null
+
+    // Cache for ROM ID lookups during a sync operation
+    // Key: Pair(platformId, baseFileName), Value: romId
+    private val romIdLookupCache = mutableMapOf<Pair<Int, String>, Int?>()
+
+    /**
+     * Clear all caches. Called at the start of each sync operation.
+     */
+    private fun clearCaches() {
+        platformListCache = null
+        romIdLookupCache.clear()
+    }
+
+    /**
+     * Get the platform list, using cache if available.
+     */
+    private suspend fun getCachedPlatforms(): List<Platform> {
+        if (platformListCache == null) {
+            Log.d("SyncManager", "Fetching platform list from API (cache miss)")
+            platformListCache = apiService.getPlatforms()
+        } else {
+            Log.d("SyncManager", "Using cached platform list (cache hit)")
+        }
+        return platformListCache!!
+    }
+
     suspend fun createSyncPlan(
         syncRequest: SyncRequest,
         settings: AppSettings,
         onProgress: ((SyncProgress) -> Unit)? = null
     ): SyncPlan = withContext(Dispatchers.IO) {
         try {
+            // Clear caches at the start of sync planning
+            clearCaches()
+
             Log.d("SyncManager", "Creating sync plan...")
 
             onProgress?.invoke(SyncProgress(
@@ -938,15 +968,15 @@ class SyncManager @Inject constructor(
     private suspend fun findRomIdForFile(localItem: LocalSyncItem): Int? {
         return try {
             Log.d("SyncManager", "Finding ROM ID for file: ${localItem.fileName}")
-            Log.d("SyncManager", "  Platform: ${localItem.platform}")  
+            Log.d("SyncManager", "  Platform: ${localItem.platform}")
             Log.d("SyncManager", "  Game name from file: '${localItem.gameName}'")
-            
+
             // Extract the base filename without save file extensions for matching
             val baseFileName = extractGameNameFromSaveFileName(localItem.fileName)
             Log.d("SyncManager", "  Base filename: '$baseFileName'")
-            
-            // Search for games by name and platform
-            val platforms = apiService.getPlatforms()
+
+            // Use cached platform list
+            val platforms = getCachedPlatforms()
 
             // Convert ES-DE folder name to RomM platform slug if needed
             val rommPlatformSlug = PlatformMapper.getRommSlugFromEsdeFolder(localItem.platform)
@@ -958,45 +988,64 @@ class SyncManager @Inject constructor(
                 it.slug.equals(localItem.platform, ignoreCase = true) ||
                 it.display_name.equals(localItem.platform, ignoreCase = true)
             }
-            
+
             if (platform == null) {
                 Log.w("SyncManager", "  Could not find platform: ${localItem.platform}")
                 return null
             }
-            
+
             Log.d("SyncManager", "  Found platform: ${platform.display_name} (${platform.slug})")
-            
+
+            // Check ROM ID lookup cache
+            val cacheKey = Pair(platform.id, baseFileName.lowercase())
+            val cachedRomId = romIdLookupCache[cacheKey]
+            if (cachedRomId != null) {
+                Log.d("SyncManager", "  ROM ID cache hit: $cachedRomId")
+                return cachedRomId
+            } else if (romIdLookupCache.containsKey(cacheKey)) {
+                // We've already looked this up and found nothing
+                Log.d("SyncManager", "  ROM ID cache hit: null (previously not found)")
+                return null
+            }
+
+            // Cache miss - perform the lookup
+            Log.d("SyncManager", "  ROM ID cache miss, performing lookup")
+
             // Use search to find games more efficiently
-            val searchTerm = baseFileName.take(10) // Use first 10 chars to search  
+            val searchTerm = baseFileName.take(10) // Use first 10 chars to search
             val games = apiService.getGames(platformId = platform.id, searchTerm = searchTerm)
             Log.d("SyncManager", "  Searched for '$searchTerm' and found ${games.size} games")
-            
+
             // Try to match using multiple strategies
             val gameName = localItem.gameName?.lowercase()
             val baseFileNameLower = baseFileName.lowercase()
-            
+
             Log.d("SyncManager", "  Searching for matches with:")
             Log.d("SyncManager", "    gameName: '$gameName'")
             Log.d("SyncManager", "    baseFileName: '$baseFileNameLower'")
-            
+
             // Match only by comparing save/state filename (no ext) with ROM fs_name_no_ext
             val matchedGame = games.find { game ->
                 val fsNameNoExtMatchWithFileName = game.fs_name_no_ext.lowercase() == baseFileNameLower
-                
+
                 Log.d("SyncManager", "    Checking game: '${game.name}' / fs_name_no_ext: '${game.fs_name_no_ext}'")
                 Log.d("SyncManager", "      Match with baseFileName: $fsNameNoExtMatchWithFileName")
-                
+
                 fsNameNoExtMatchWithFileName
             }
-            
+
+            // Cache the result (even if null)
+            val romId = matchedGame?.id
+            romIdLookupCache[cacheKey] = romId
+
             if (matchedGame != null) {
-                Log.d("SyncManager", "  Found matching game: ${matchedGame.name} (ID: ${matchedGame.id})")
+                Log.d("SyncManager", "  Found matching game: ${matchedGame.name} (ID: ${matchedGame.id}) - cached for future lookups")
                 return matchedGame.id
             } else {
-                Log.w("SyncManager", "  No matching game found!")
+                Log.w("SyncManager", "  No matching game found! - cached null result")
                 return null
             }
-            
+
         } catch (e: Exception) {
             Log.e("SyncManager", "Error finding ROM ID for ${localItem.fileName}", e)
             null
