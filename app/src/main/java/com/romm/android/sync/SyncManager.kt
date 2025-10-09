@@ -6,6 +6,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.romm.android.data.*
 import com.romm.android.network.RomMApiService
 import com.romm.android.utils.DownloadManager
+import com.romm.android.utils.LegacyPlatformSlugMapper
 import com.romm.android.utils.PlatformMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -353,10 +354,13 @@ class SyncManager @Inject constructor(
                         continue
                     }
 
+                    // Normalize legacy platform slugs (for old remote files with incorrect slugs)
+                    val normalizedPlatform = LegacyPlatformSlugMapper.normalize(platformFromPath)
+
                     // Apply filters
                     if (syncRequest.platformFilter != null &&
-                        !platformFromPath.equals(syncRequest.platformFilter, ignoreCase = true)) {
-                        Log.d("SyncManager", "Skipped save file due to platform filter: ${save.file_name} (platform: $platformFromPath)")
+                        !normalizedPlatform.equals(syncRequest.platformFilter, ignoreCase = true)) {
+                        Log.d("SyncManager", "Skipped save file due to platform filter: ${save.file_name} (platform: $normalizedPlatform)")
                         continue
                     }
 
@@ -377,7 +381,7 @@ class SyncManager @Inject constructor(
                     val remoteItem = RemoteSyncItem(
                         saveFile = save,
                         type = SyncItemType.SAVE_FILE,
-                        platform = platformFromPath,
+                        platform = normalizedPlatform,
                         emulator = save.emulator,
                         gameName = extractGameNameFromFilename(save.file_name),
                         fileName = save.file_name,
@@ -419,10 +423,13 @@ class SyncManager @Inject constructor(
                         continue
                     }
 
+                    // Normalize legacy platform slugs (for old remote files with incorrect slugs)
+                    val normalizedPlatform = LegacyPlatformSlugMapper.normalize(platformFromPath)
+
                     // Apply filters
                     if (syncRequest.platformFilter != null &&
-                        !platformFromPath.equals(syncRequest.platformFilter, ignoreCase = true)) {
-                        Log.d("SyncManager", "Skipped save state due to platform filter: ${state.file_name} (platform: $platformFromPath)")
+                        !normalizedPlatform.equals(syncRequest.platformFilter, ignoreCase = true)) {
+                        Log.d("SyncManager", "Skipped save state due to platform filter: ${state.file_name} (platform: $normalizedPlatform)")
                         continue
                     }
 
@@ -443,7 +450,7 @@ class SyncManager @Inject constructor(
                     remoteItems.add(RemoteSyncItem(
                         saveState = state,
                         type = SyncItemType.SAVE_STATE,
-                        platform = platformFromPath,
+                        platform = normalizedPlatform,
                         emulator = state.emulator,
                         gameName = extractGameNameFromFilename(state.file_name),
                         fileName = state.file_name,
@@ -479,8 +486,8 @@ class SyncManager @Inject constructor(
         Log.d("SyncManager", "Final remote items count: ${remoteItems.size}")
         return remoteItems
     }
-    
-    
+
+
     private fun parseDateTime(dateString: String?): LocalDateTime {
         if (dateString.isNullOrBlank()) {
             return LocalDateTime.now()
