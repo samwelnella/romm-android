@@ -461,9 +461,81 @@ fun SettingsScreen(
                 }
             }
         }
-        
+
+        Card {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Developer Settings",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Text(
+                    "Sync log level controls the verbosity of sync operation logs. INFO shows only important operations, DEBUG adds cache info, VERBOSE shows all details.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Log Level Dropdown
+                var expanded by remember { mutableStateOf(false) }
+                val logLevels = listOf("VERBOSE", "DEBUG", "INFO", "WARN", "ERROR", "NONE")
+                val logLevelDescriptions = mapOf(
+                    "VERBOSE" to "All details (slowest)",
+                    "DEBUG" to "Cache info + important ops",
+                    "INFO" to "Important operations only",
+                    "WARN" to "Warnings and errors",
+                    "ERROR" to "Errors only",
+                    "NONE" to "No logging"
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = "${currentSettings.syncLogLevel} - ${logLevelDescriptions[currentSettings.syncLogLevel] ?: ""}",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sync Log Level") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        logLevels.forEach { level ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(level)
+                                        Text(
+                                            logLevelDescriptions[level] ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    currentSettings = currentSettings.copy(syncLogLevel = level)
+                                    expanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Button(
-            onClick = { 
+            onClick = {
                 try {
                     onSettingsChanged(currentSettings)
                     // Settings saved - navigation will be handled by the ViewModel/TopAppBar

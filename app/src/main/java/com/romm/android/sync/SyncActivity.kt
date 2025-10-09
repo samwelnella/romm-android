@@ -24,6 +24,7 @@ import com.romm.android.data.SettingsRepository
 import com.romm.android.network.RomMApiService
 import com.romm.android.ui.theme.RomMTheme
 import com.romm.android.utils.DownloadManager
+import com.romm.android.utils.SyncLogger
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,7 +147,10 @@ class SyncViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val settings = settingsRepository.getCurrentSettings()
-                
+
+                // Apply log level from settings
+                SyncLogger.setLevelFromString(settings.syncLogLevel)
+
                 // Validate settings
                 if (settings.host.isEmpty()) {
                     _uiState.value = _uiState.value.copy(

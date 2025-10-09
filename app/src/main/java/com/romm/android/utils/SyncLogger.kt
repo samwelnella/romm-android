@@ -26,6 +26,21 @@ object SyncLogger {
      */
     var level: LogLevel = LogLevel.INFO
 
+    /**
+     * Set the log level from a string value (from settings).
+     */
+    fun setLevelFromString(levelString: String) {
+        level = when (levelString.uppercase()) {
+            "VERBOSE" -> LogLevel.VERBOSE
+            "DEBUG" -> LogLevel.DEBUG
+            "INFO" -> LogLevel.INFO
+            "WARN" -> LogLevel.WARN
+            "ERROR" -> LogLevel.ERROR
+            "NONE" -> LogLevel.NONE
+            else -> LogLevel.INFO
+        }
+    }
+
     private const val TAG_SYNC = "SyncManager"
     private const val TAG_FILE_SCANNER = "FileScanner"
 
