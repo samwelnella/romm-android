@@ -1115,16 +1115,25 @@ class SyncManager @Inject constructor(
     }
 
     private fun extractGameNameFromSaveFileName(fileName: String): String {
+        // First, try to remove numbered state extensions with regex pattern (handles any number)
+        val numberedStatePattern = Regex("\\.state\\d+$", RegexOption.IGNORE_CASE)
+        var gameName = fileName.replace(numberedStatePattern, "")
+
+        // If we already removed a numbered state, return early
+        if (gameName != fileName) {
+            return gameName.ifBlank { fileName.substringBeforeLast(".") }
+        }
+
         // Known save file extensions that should be removed from game name
         val saveFileExtensions = listOf(
             ".srm", ".sav", ".save", ".mcr", ".mc", ".gme", ".fla", ".dat", ".eep", ".bkp",
-            ".state", ".state0", ".state1", ".state2", ".state3", ".state4", ".state5", ".state6", ".state7", ".state8", ".state9",
+            ".state",
             ".st", ".st0", ".st1", ".st2", ".st3", ".st4", ".st5", ".st6", ".st7", ".st8", ".st9",
             ".ss0", ".ss1", ".sts", ".savestate",
             ".cdrom" // Add cdrom extension for games like "Alien vs Predator.cdrom.srm"
         )
 
-        var gameName = fileName
+        gameName = fileName
 
         // Remove extensions from the end, in order of priority
         // This handles cases like "Game.cdrom.srm" -> "Game"
