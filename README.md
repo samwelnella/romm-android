@@ -1,3 +1,5 @@
+#This project is archived. Every one should use Argosy Launcher for RomM on Android
+
 # RomM Android Client
 
 A modern Android app for browsing and downloading ROMs from your RomM server instance.
